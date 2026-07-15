@@ -6,7 +6,7 @@
 
 **Architecture:** FastAPI API 계층은 application 사용 사례만 호출하고, SQLAlchemy 저장소는 infrastructure에 둔다. React는 TanStack Query의 서버 상태와 `BrandProvider`의 현재 브랜드 상태를 분리하며, shadcn/ui 원본 컴포넌트와 BIXOLON 토큰으로 관리 화면 셸을 구성한다.
 
-**Tech Stack:** Python 3.13, uv, FastAPI, SQLAlchemy 2.0, Alembic, SQLite, pytest, React 19.2, TypeScript, Vite 8, Tailwind CSS 4, shadcn/ui, Radix UI, Lucide, TanStack Query, Vitest, React Testing Library
+**Tech Stack:** Python 3.13, uv, FastAPI, SQLAlchemy 2.0, Alembic, SQLite, pytest, React 19.2, TypeScript, Vite 8, Tailwind CSS 4, shadcn/ui, Base UI, Lucide, TanStack Query, Vitest, React Testing Library
 
 ## Global Constraints
 
@@ -265,7 +265,7 @@ git commit -m "feat: expose catalog API"
 
 - [ ] **Step 1: Vite 프로젝트와 실패 테스트 작성**
 
-React 19.2, Vite 8, TypeScript, Tailwind CSS 4, React Router, TanStack Query, Radix UI, Lucide, 공식 `pretendard@1.3.9`, Vitest, Testing Library, MSW를 설치하고 lockfile을 만든다. `components.json`은 style `base-nova`, base color `neutral`, CSS variables 사용, RSC 비사용으로 고정한다. 테스트는 앱 이름과 세 메뉴를 요구한다.
+React 19.2, Vite 8, TypeScript, Tailwind CSS 4, React Router, TanStack Query, Base UI, Lucide, 공식 `pretendard@1.3.9`, Vitest, Testing Library, MSW를 설치하고 lockfile을 만든다. `components.json`은 style `base-nova`, base color `neutral`, CSS variables 사용, RSC 비사용으로 고정한다. 테스트는 앱 이름과 세 메뉴를 요구한다.
 
 ```tsx
 render(<AppRouter />)
