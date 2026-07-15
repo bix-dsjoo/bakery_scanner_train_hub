@@ -2,15 +2,21 @@ from datetime import datetime
 from typing import Annotated, Literal, Self
 
 from fastapi import APIRouter, Query, status
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, StringConstraints, model_validator
 
 from backend.app.api.dependencies import CatalogServiceDependency
 
 
 router = APIRouter(prefix="/api/v1", tags=["catalog"])
 
-Name = Annotated[str, Field(min_length=1, max_length=100)]
-ProductCode = Annotated[str, Field(min_length=1, max_length=50)]
+Name = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=100),
+]
+ProductCode = Annotated[
+    str,
+    StringConstraints(strip_whitespace=True, min_length=1, max_length=50),
+]
 CatalogStatus = Literal["ACTIVE", "INACTIVE"]
 DeactivationStatus = Literal["INACTIVE"]
 

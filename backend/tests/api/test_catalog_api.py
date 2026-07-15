@@ -18,6 +18,14 @@ def assert_utc_iso8601(value: str) -> None:
     assert parsed.utcoffset() == timezone.utc.utcoffset(parsed)
 
 
+def api_test_settings(data_dir: Path) -> Settings:
+    database_path = data_dir / "database" / "app.db"
+    return Settings(
+        data_dir=data_dir,
+        database_url=f"sqlite:///{database_path.as_posix()}",
+    )
+
+
 def create_test_app(settings: Settings) -> FastAPI:
     engine = create_engine_for(settings)
     try:
@@ -29,7 +37,7 @@ def create_test_app(settings: Settings) -> FastAPI:
 
 @pytest.fixture
 def client(tmp_path: Path) -> Iterator[TestClient]:
-    with TestClient(create_test_app(Settings(data_dir=tmp_path))) as test_client:
+    with TestClient(create_test_app(api_test_settings(tmp_path))) as test_client:
         yield test_client
 
 
@@ -207,9 +215,9 @@ def test_request_and_catalog_validation_errors_use_common_shape(
         "name": "문자열은 100자 이하여야 해요."
     }
     assert blank_name.status_code == 422
-    assert blank_name.json()["code"] == "CATALOG_FIELD_REQUIRED"
+    assert blank_name.json()["code"] == "REQUEST_VALIDATION_ERROR"
     assert blank_name.json()["field_errors"] == {
-        "name": "name 값은 비워 둘 수 없어요."
+        "name": "문자열은 1자 이상이어야 해요."
     }
     assert invalid_status.status_code == 422
     assert invalid_status.json()["code"] == "CATALOG_STATUS_INVALID"
@@ -229,6 +237,129 @@ def test_patch_requires_a_change_and_only_supports_deactivation(
     assert empty_patch.json()["code"] == "REQUEST_VALIDATION_ERROR"
     assert reactivation.status_code == 422
     assert reactivation.json()["code"] == "REQUEST_VALIDATION_ERROR"
+
+
+def test_brand_create_trims_before_enforcing_name_length(
+    client: TestClient,
+) -> None:
+    normalized_name = "가" * 100
+
+    accepted = client.post(
+        "/api/v1/brands", json={"name": f"  {normalized_name}  "}
+    )
+    rejected = client.post(
+        "/api/v1/brands", json={"name": f"  {'나' * 101}  "}
+    )
+
+    assert accepted.status_code == 201
+    assert accepted.json()["name"] == normalized_name
+    assert rejected.status_code == 422
+    assert rejected.json()["code"] == "REQUEST_VALIDATION_ERROR"
+    assert rejected.json()["field_errors"] == {
+        "name": "문자열은 100자 이하여야 해요."
+    }
+
+
+def test_brand_patch_trims_before_enforcing_name_length(
+    client: TestClient,
+) -> None:
+    brand = client.post("/api/v1/brands", json={"name": "BIXOLON Bakery"}).json()
+    normalized_name = "다" * 100
+
+    accepted = client.patch(
+        f"/api/v1/brands/{brand['id']}",
+        json={"name": f"  {normalized_name}  "},
+    )
+    rejected = client.patch(
+        f"/api/v1/brands/{brand['id']}",
+        json={"name": f"  {'라' * 101}  "},
+    )
+
+    assert accepted.status_code == 200
+    assert accepted.json()["name"] == normalized_name
+    assert rejected.status_code == 422
+    assert rejected.json()["code"] == "REQUEST_VALIDATION_ERROR"
+    assert rejected.json()["field_errors"] == {
+        "name": "문자열은 100자 이하여야 해요."
+    }
+
+
+def test_product_create_trims_before_enforcing_code_and_name_lengths(
+    client: TestClient,
+) -> None:
+    brand = client.post("/api/v1/brands", json={"name": "BIXOLON Bakery"}).json()
+    products_url = f"/api/v1/brands/{brand['id']}/products"
+    normalized_code = "C" * 50
+    normalized_name = "마" * 100
+
+    accepted = client.post(
+        products_url,
+        json={
+            "code": f"  {normalized_code}  ",
+            "name": f"  {normalized_name}  ",
+        },
+    )
+    code_rejected = client.post(
+        products_url,
+        json={"code": f"  {'D' * 51}  ", "name": "소금빵"},
+    )
+    name_rejected = client.post(
+        products_url,
+        json={"code": "BREAD-002", "name": f"  {'바' * 101}  "},
+    )
+
+    assert accepted.status_code == 201
+    assert accepted.json()["code"] == normalized_code
+    assert accepted.json()["name"] == normalized_name
+    assert code_rejected.status_code == 422
+    assert code_rejected.json()["field_errors"] == {
+        "code": "문자열은 50자 이하여야 해요."
+    }
+    assert name_rejected.status_code == 422
+    assert name_rejected.json()["field_errors"] == {
+        "name": "문자열은 100자 이하여야 해요."
+    }
+
+
+def test_product_patch_trims_before_enforcing_code_and_name_lengths(
+    client: TestClient,
+) -> None:
+    brand = client.post("/api/v1/brands", json={"name": "BIXOLON Bakery"}).json()
+    product = client.post(
+        f"/api/v1/brands/{brand['id']}/products",
+        json={"code": "BREAD-001", "name": "소금빵"},
+    ).json()
+    product_url = (
+        f"/api/v1/brands/{brand['id']}/products/{product['id']}"
+    )
+    normalized_code = "E" * 50
+    normalized_name = "사" * 100
+
+    accepted = client.patch(
+        product_url,
+        json={
+            "code": f"  {normalized_code}  ",
+            "name": f"  {normalized_name}  ",
+        },
+    )
+    code_rejected = client.patch(
+        product_url, json={"code": f"  {'F' * 51}  "}
+    )
+    name_rejected = client.patch(
+        product_url, json={"name": f"  {'아' * 101}  "}
+    )
+
+    assert accepted.status_code == 200
+    assert accepted.json()["code"] == normalized_code
+    assert accepted.json()["name"] == normalized_name
+    assert code_rejected.status_code == 422
+    assert code_rejected.json()["field_errors"] == {
+        "code": "문자열은 50자 이하여야 해요."
+    }
+    assert name_rejected.status_code == 422
+    assert name_rejected.json()["field_errors"] == {
+        "name": "문자열은 100자 이하여야 해요."
+    }
 
 
 def test_unknown_api_route_uses_common_error_shape(client: TestClient) -> None:
@@ -264,7 +395,7 @@ def test_method_not_allowed_preserves_allow_header(client: TestClient) -> None:
 
 
 def test_unexpected_api_error_uses_common_error_shape(tmp_path: Path) -> None:
-    app = create_test_app(Settings(data_dir=tmp_path))
+    app = create_test_app(api_test_settings(tmp_path))
 
     def failing_catalog_service() -> None:
         raise RuntimeError("database unavailable")
@@ -283,8 +414,8 @@ def test_unexpected_api_error_uses_common_error_shape(tmp_path: Path) -> None:
 
 
 def test_application_instances_do_not_share_test_databases(tmp_path: Path) -> None:
-    first_settings = Settings(data_dir=tmp_path / "first")
-    second_settings = Settings(data_dir=tmp_path / "second")
+    first_settings = api_test_settings(tmp_path / "first")
+    second_settings = api_test_settings(tmp_path / "second")
 
     with TestClient(create_test_app(first_settings)) as first_client:
         first_client.post("/api/v1/brands", json={"name": "First Bakery"})
@@ -292,3 +423,28 @@ def test_application_instances_do_not_share_test_databases(tmp_path: Path) -> No
 
     with TestClient(create_test_app(second_settings)) as second_client:
         assert second_client.get("/api/v1/brands").json() == []
+
+
+def test_api_test_database_ignores_ambient_database_url(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    external_database = tmp_path.parent / f"{tmp_path.name}-ambient.db"
+    data_dir = tmp_path / "isolated"
+    expected_database = data_dir / "database" / "app.db"
+    monkeypatch.setenv(
+        "BAKERY_DATABASE_URL", f"sqlite:///{external_database.as_posix()}"
+    )
+
+    settings = api_test_settings(data_dir)
+    try:
+        with TestClient(create_test_app(settings)) as test_client:
+            response = test_client.post(
+                "/api/v1/brands", json={"name": "Isolated Bakery"}
+            )
+
+        assert response.status_code == 201
+        assert settings.database_url == f"sqlite:///{expected_database.as_posix()}"
+        assert expected_database.exists()
+        assert not external_database.exists()
+    finally:
+        external_database.unlink(missing_ok=True)
