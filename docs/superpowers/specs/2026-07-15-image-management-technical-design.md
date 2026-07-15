@@ -16,7 +16,7 @@
 ### 2.1 기술 스택
 
 - 프런트엔드: React 19.2, TypeScript, Vite 8, Tailwind CSS 4
-- UI 컴포넌트: shadcn/ui `base-nova`, Radix UI, Lucide
+- UI 컴포넌트: shadcn/ui `base-nova`, Base UI, Lucide
 - 라벨링 캔버스: Konva 10과 `react-konva`
 - 백엔드: Python 3.13, FastAPI
 - 데이터 접근: SQLAlchemy 2.0, Alembic

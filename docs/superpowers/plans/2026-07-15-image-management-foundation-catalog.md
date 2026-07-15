@@ -6,7 +6,7 @@
 
 **Architecture:** FastAPI API 계층은 application 사용 사례만 호출하고, SQLAlchemy 저장소는 infrastructure에 둔다. React는 TanStack Query의 서버 상태와 `BrandProvider`의 현재 브랜드 상태를 분리하며, shadcn/ui 원본 컴포넌트와 BIXOLON 토큰으로 관리 화면 셸을 구성한다.
 
-**Tech Stack:** Python 3.13, uv, FastAPI, SQLAlchemy 2.0, Alembic, SQLite, pytest, React 19.2, TypeScript, Vite 8, Tailwind CSS 4, shadcn/ui, Radix UI, Lucide, TanStack Query, Vitest, React Testing Library
+**Tech Stack:** Python 3.13, uv, FastAPI, SQLAlchemy 2.0, Alembic, SQLite, pytest, React 19.2, TypeScript, Vite 8, Tailwind CSS 4, shadcn/ui, Base UI, Lucide, TanStack Query, Vitest, React Testing Library
 
 ## Global Constraints
 
@@ -265,7 +265,7 @@ git commit -m "feat: expose catalog API"
 
 - [ ] **Step 1: Vite 프로젝트와 실패 테스트 작성**
 
-React 19.2, Vite 8, TypeScript, Tailwind CSS 4, React Router, TanStack Query, Radix UI, Lucide, `@fontsource-variable/pretendard`, Vitest, Testing Library, MSW를 설치하고 lockfile을 만든다. `components.json`은 style `base-nova`, base color `neutral`, CSS variables 사용, RSC 비사용으로 고정한다. 테스트는 앱 이름과 세 메뉴를 요구한다.
+React 19.2, Vite 8, TypeScript, Tailwind CSS 4, React Router, TanStack Query, Base UI, Lucide, 공식 `pretendard@1.3.9`, Vitest, Testing Library, MSW를 설치하고 lockfile을 만든다. `components.json`은 style `base-nova`, base color `neutral`, CSS variables 사용, RSC 비사용으로 고정한다. 테스트는 앱 이름과 세 메뉴를 요구한다.
 
 ```tsx
 render(<AppRouter />)
@@ -281,7 +281,7 @@ Expected: FAIL because shell and router are absent.
 
 - [ ] **Step 3: 토큰, provider와 관리 셸 구현**
 
-`main.tsx`에서 Pretendard variable font를 self-host import하고 실제 사용 굵기는 400·500·600·700으로 제한한다. `index.css`에 승인된 색상, 6px radius, 36px 일반 컨트롤, 2px 오렌지 focus ring을 CSS 변수로 정의한다. 1280px 이상은 224px 사이드바, 그 미만은 Sheet 탐색을 사용한다. 메뉴는 `오늘의 작업`, `상품 관리`, `트레이 사진`만 둔다. 공식 로고 자산이 없으므로 앱 이름은 일반 텍스트로 표시한다. `apiClient`는 오류 JSON을 `ApiClientError`로 보존한다.
+`main.tsx`에서 `pretendard/dist/web/variable/pretendardvariable.css`를 import해 variable font를 self-host하고 실제 사용 굵기는 400·500·600·700으로 제한한다. `index.css`에 승인된 색상, 6px radius, 36px 일반 컨트롤, 2px 오렌지 focus ring을 CSS 변수로 정의한다. 1280px 이상은 224px 사이드바, 그 미만은 Sheet 탐색을 사용한다. 메뉴는 `오늘의 작업`, `상품 관리`, `트레이 사진`만 둔다. 공식 로고 자산이 없으므로 앱 이름은 일반 텍스트로 표시한다. `apiClient`는 오류 JSON을 `ApiClientError`로 보존한다.
 
 - [ ] **Step 4: 테스트와 production build 통과 확인**
 
@@ -302,11 +302,14 @@ git commit -m "build: scaffold branded React application"
 - Create: `frontend/src/features/brands/api.ts`
 - Create: `frontend/src/features/brands/brand-provider.tsx`
 - Create: `frontend/src/features/brands/brand-selector.tsx`
+- Create: `frontend/src/features/brands/brand-form-dialog.tsx`
+- Create: `frontend/src/features/brands/brand-management-dialog.tsx`
 - Create: `frontend/src/features/products/api.ts`
 - Create: `frontend/src/features/products/product-form-dialog.tsx`
 - Create: `frontend/src/pages/products-page.tsx`
 - Create: `frontend/src/features/brands/brand-provider.test.tsx`
 - Create: `frontend/src/pages/products-page.test.tsx`
+- Modify: `frontend/src/app/app-shell.tsx`
 - Modify: `frontend/src/app/router.tsx`
 
 **Interfaces:**

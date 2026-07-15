@@ -1,0 +1,23 @@
+[project]
+name = "bakery-scanner-train-hub"
+version = "0.1.0"
+description = "Internal image management tool for Bakery Scanner training data"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "alembic>=1.16,<1.17",
+    "fastapi>=0.116,<0.117",
+    "pydantic-settings>=2.10,<2.11",
+    "sqlalchemy>=2.0,<2.1",
+    "uvicorn[standard]>=0.35,<0.36",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28,<0.29",
+    "pytest>=8.4,<8.5",
+    "pytest-asyncio>=1.1,<1.2",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["backend/tests"]

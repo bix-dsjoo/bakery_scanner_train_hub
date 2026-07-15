@@ -4,11 +4,29 @@
 
 ## 현재 단계
 
-현재 저장소는 이미지 관리 MVP의 제품 설계와 기술 설계를 마친 단계입니다. 실행 가능한 애플리케이션 코드는 아직 없습니다.
+현재 저장소는 이미지 관리 MVP의 첫 구현 단계입니다. FastAPI와 React 애플리케이션 기반, 현재 브랜드 선택, 브랜드·상품 등록·수정·비활성화까지 실행할 수 있습니다. 이미지 업로드, 트레이 사진 작업함과 라벨링 편집기는 이후 단계에서 구현합니다.
 
 승인된 상세 설계는 [브랜드별 베이커리 이미지 관리 MVP 설계](docs/superpowers/specs/2026-07-15-bakery-image-management-design.md)에서 확인할 수 있습니다.
 
-구현 기술은 React·TypeScript·FastAPI·Python 3.13·SQLite로 결정했습니다. UI는 shadcn/ui와 Tailwind CSS 4를 기반으로 BIXOLON 브랜드 색상과 Pretendard를 적용합니다. Windows PC 한 대에서 `start.ps1`로 실행하고 회사 내부망의 브라우저에서 사용합니다. 상세한 실행·저장 구조는 [이미지 관리 MVP 기술 설계](docs/superpowers/specs/2026-07-15-image-management-technical-design.md)를 따릅니다.
+구현 기술은 React·TypeScript·FastAPI·Python 3.13·SQLite입니다. UI는 shadcn/ui와 Tailwind CSS 4를 기반으로 BIXOLON 브랜드 색상과 Pretendard를 적용합니다. 현재 개발 환경은 `start-dev.ps1`로 실행하며, 운영용 단일 실행 스크립트와 사내망 배포 검증은 이후 운영 단계에서 완성합니다. 상세한 실행·저장 구조는 [이미지 관리 MVP 기술 설계](docs/superpowers/specs/2026-07-15-image-management-technical-design.md)를 따릅니다.
+
+## 개발 환경 실행
+
+Windows PC에 다음 도구를 먼저 설치하고 각 명령이 PowerShell의 `PATH`에서 실행되는지 확인합니다.
+
+- Python 3.13
+- [uv](https://docs.astral.sh/uv/getting-started/installation/)
+- Node.js 24 LTS와 npm
+
+저장소 루트에서 다음 명령을 실행합니다.
+
+```powershell
+./start-dev.ps1
+```
+
+스크립트는 저장소 위치를 기준으로 Python·프런트엔드 의존성을 준비하고, Alembic 데이터베이스 마이그레이션을 적용한 뒤 FastAPI reload 서버와 Vite 개발 서버를 함께 시작합니다. 마이그레이션이 실패하면 표시된 Alembic 오류의 원인을 해결하고 스크립트를 다시 실행해야 하며, 서버는 시작되지 않습니다. 브라우저에서 `http://127.0.0.1:5173`을 열고 종료할 때는 실행 중인 PowerShell에서 `Ctrl+C`를 누릅니다. 관리자 권한이나 방화벽 변경은 필요하지 않습니다.
+
+운영 빌드에서는 FastAPI가 `frontend/dist`의 SPA와 `/api/v1` API를 같은 origin에서 제공합니다. 개발 중에는 Vite가 `/api` 요청을 `http://127.0.0.1:8000`으로 전달합니다.
 
 ## 사용자
 
@@ -88,4 +106,4 @@ MVP는 내부망에서 로그인 없이 사용합니다.
 
 ## 저장소 상태
 
-현재 브랜치는 문서 중심의 기획 단계입니다. 애플리케이션 구현은 승인된 기술 설계와 이후 작성할 구현 계획을 기준으로 진행합니다.
+현재 구현 범위는 애플리케이션 기반과 브랜드·상품 카탈로그입니다. 이미지 업로드, 라벨링, 운영 배포 기능은 승인된 구현 로드맵의 다음 단계에서 추가합니다.
