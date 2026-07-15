@@ -10,14 +10,16 @@
 
 1. `README.md`
 2. `docs/superpowers/specs/2026-07-15-bakery-image-management-design.md`
-3. 현재 작업과 관련된 `docs/superpowers/plans/` 아래의 승인된 계획
+3. `docs/superpowers/specs/2026-07-15-image-management-technical-design.md`
+4. 현재 작업과 관련된 `docs/superpowers/plans/` 아래의 승인된 계획
 
 설계 문서는 제품 범위와 데이터 규칙의 소스 오브 트루스입니다. README나 코드가 설계와 충돌하면 임의로 해석하지 말고 설계를 기준으로 차이를 보고합니다.
 
 ## 현재 프로젝트 단계
 
 - 현재 브랜치는 이미지 관리 MVP의 기획·문서화 단계입니다.
-- 실행 가능한 애플리케이션 기술 스택은 아직 선택하지 않았습니다.
+- 승인된 기술 스택은 React·TypeScript·Vite, FastAPI·Python 3.13, SQLite·SQLAlchemy, 로컬 파일 저장소입니다.
+- 실제 업무 데이터는 기본적으로 `C:\BakeryScannerData`에 저장하며 자동 백업은 제공하지 않습니다.
 - 승인된 구현 계획 없이 프레임워크, 데이터베이스, 배포 환경을 임의로 도입하지 않습니다.
 - 이번 MVP는 내부망에서 로그인 없이 사용합니다.
 
