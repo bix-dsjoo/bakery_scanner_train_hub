@@ -4,9 +4,11 @@
 
 ## 현재 단계
 
-현재 저장소는 이미지 관리 MVP의 설계를 마친 단계입니다. 실행 가능한 애플리케이션 코드는 아직 없습니다.
+현재 저장소는 이미지 관리 MVP의 제품 설계와 기술 설계를 마친 단계입니다. 실행 가능한 애플리케이션 코드는 아직 없습니다.
 
 승인된 상세 설계는 [브랜드별 베이커리 이미지 관리 MVP 설계](docs/superpowers/specs/2026-07-15-bakery-image-management-design.md)에서 확인할 수 있습니다.
+
+구현 기술은 React·TypeScript·FastAPI·Python 3.13·SQLite로 결정했습니다. UI는 shadcn/ui와 Tailwind CSS 4를 기반으로 BIXOLON 브랜드 색상과 Pretendard를 적용합니다. Windows PC 한 대에서 `start.ps1`로 실행하고 회사 내부망의 브라우저에서 사용합니다. 상세한 실행·저장 구조는 [이미지 관리 MVP 기술 설계](docs/superpowers/specs/2026-07-15-image-management-technical-design.md)를 따릅니다.
 
 ## 사용자
 
@@ -14,6 +16,8 @@
 - ML 엔지니어: 축적된 이미지와 라벨의 구조와 상태를 확인합니다.
 
 MVP는 내부망에서 로그인 없이 사용합니다.
+
+업무 데이터는 기본적으로 `C:\BakeryScannerData`에 저장합니다. MVP에는 자동 백업이 없으므로 PC나 디스크가 고장 나면 데이터를 복구할 수 없습니다.
 
 ## MVP가 해결하는 문제
 
@@ -76,9 +80,11 @@ MVP는 내부망에서 로그인 없이 사용합니다.
 ## 문서
 
 - [이미지 관리 MVP 설계](docs/superpowers/specs/2026-07-15-bakery-image-management-design.md)
+- [이미지 관리 MVP 기술 설계](docs/superpowers/specs/2026-07-15-image-management-technical-design.md)
+- [이미지 관리 MVP UI 디자인](docs/superpowers/specs/2026-07-15-image-management-ui-design.md)
 - [문서 기반 구현 계획](docs/superpowers/plans/2026-07-15-documentation-foundation.md)
 - [에이전트 작업 지침](AGENTS.md)
 
 ## 저장소 상태
 
-현재 브랜치는 문서 중심의 기획 단계입니다. 애플리케이션 기술 스택과 코드 구조는 별도의 승인된 구현 계획에서 결정합니다.
+현재 브랜치는 문서 중심의 기획 단계입니다. 애플리케이션 구현은 승인된 기술 설계와 이후 작성할 구현 계획을 기준으로 진행합니다.
