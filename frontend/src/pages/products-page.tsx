@@ -22,6 +22,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { BrandFormDialog } from "@/features/brands/brand-form-dialog"
 import { useCurrentBrand } from "@/features/brands/brand-provider"
 import {
@@ -197,28 +202,44 @@ export function ProductsPage() {
                     </span>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      aria-label={`${product.name} 수정`}
-                      onClick={() => setEditingProduct(product)}
-                    >
-                      <PencilIcon /> <span className="hidden sm:inline">수정</span>
-                    </Button>
-                    {product.status === "ACTIVE" && (
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="sm"
-                        aria-label={`${product.name} 비활성화`}
-                        onClick={() => {
-                          setDeactivateError(null)
-                          setDeactivatingProduct(product)
-                        }}
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            aria-label={`${product.name} 수정`}
+                            onClick={() => setEditingProduct(product)}
+                          />
+                        }
                       >
-                        <BanIcon /> <span className="hidden sm:inline">비활성화</span>
-                      </Button>
+                        <PencilIcon />
+                        <span className="hidden sm:inline">수정</span>
+                      </TooltipTrigger>
+                      <TooltipContent>{product.name} 수정</TooltipContent>
+                    </Tooltip>
+                    {product.status === "ACTIVE" && (
+                      <Tooltip>
+                        <TooltipTrigger
+                          render={
+                            <Button
+                              type="button"
+                              variant="destructive"
+                              size="sm"
+                              aria-label={`${product.name} 비활성화`}
+                              onClick={() => {
+                                setDeactivateError(null)
+                                setDeactivatingProduct(product)
+                              }}
+                            />
+                          }
+                        >
+                          <BanIcon />
+                          <span className="hidden sm:inline">비활성화</span>
+                        </TooltipTrigger>
+                        <TooltipContent>{product.name} 비활성화</TooltipContent>
+                      </Tooltip>
                     )}
                   </div>
                 </li>

@@ -9,6 +9,7 @@ import { BrandProvider } from "@/features/brands/brand-provider"
 import { BrandSelector } from "@/features/brands/brand-selector"
 import type { Brand } from "@/features/brands/api"
 import { ProductsPage } from "@/pages/products-page"
+import { TooltipProvider } from "@/components/ui/tooltip"
 
 const now = "2026-07-15T08:00:00Z"
 const firstBrand = {
@@ -143,8 +144,10 @@ function renderCatalog() {
   return render(
     <QueryClientProvider client={queryClient}>
       <BrandProvider>
-        <BrandSelector />
-        <ProductsPage />
+        <TooltipProvider delay={0}>
+          <BrandSelector />
+          <ProductsPage />
+        </TooltipProvider>
       </BrandProvider>
     </QueryClientProvider>
   )
@@ -220,6 +223,34 @@ describe("ProductsPage", () => {
 
     const row = (await screen.findByText("버터 크루아상")).closest("li")!
     expect(within(row).getByText("비활성")).toBeVisible()
+  })
+
+  it("shows product action names in tooltips on keyboard focus", async () => {
+    const user = userEvent.setup()
+    renderCatalog()
+    await screen.findByText(activeProduct.name)
+
+    const editAction = screen.getByRole("button", { name: `${activeProduct.name} 수정` })
+    for (let index = 0; index < 10 && document.activeElement !== editAction; index += 1) {
+      await user.tab()
+    }
+    expect(editAction).toHaveFocus()
+    expect(await screen.findByText(`${activeProduct.name} 수정`)).toHaveAttribute(
+      "data-slot",
+      "tooltip-content"
+    )
+
+    const deactivateAction = screen.getByRole("button", {
+      name: `${activeProduct.name} 비활성화`,
+    })
+    await user.tab()
+    expect(deactivateAction).toHaveFocus()
+    expect(
+      await screen.findByText(`${activeProduct.name} 비활성화`)
+    ).toHaveAttribute(
+      "data-slot",
+      "tooltip-content"
+    )
   })
 
   it("applies search and status filters to the current brand request", async () => {

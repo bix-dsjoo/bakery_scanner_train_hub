@@ -25,6 +25,20 @@ function readStoredBrandId() {
   return localStorage.getItem(storageKey)
 }
 
+function findNextActiveBrandId(brands: Brand[], currentBrandId: string | null) {
+  const currentIndex = brands.findIndex((brand) => brand.id === currentBrandId)
+  const followingActiveBrand =
+    currentIndex >= 0
+      ? brands.slice(currentIndex + 1).find((brand) => brand.status === "ACTIVE")
+      : undefined
+
+  return (
+    followingActiveBrand?.id ??
+    brands.find((brand) => brand.status === "ACTIVE")?.id ??
+    null
+  )
+}
+
 export function BrandProvider({ children }: { children: ReactNode }) {
   const [brandId, setBrandIdState] = useState<string | null>(readStoredBrandId)
   const query = useQuery({ queryKey: brandsQueryKey, queryFn: listBrands })
@@ -37,11 +51,11 @@ export function BrandProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!query.data) return
-    const nextBrandId = brand?.id ?? activeBrands[0]?.id ?? null
+    const nextBrandId = brand?.id ?? findNextActiveBrandId(brands, brandId)
     if (nextBrandId !== brandId) setBrandIdState(nextBrandId)
     if (nextBrandId) localStorage.setItem(storageKey, nextBrandId)
     else localStorage.removeItem(storageKey)
-  }, [activeBrands, brand?.id, brandId, query.data])
+  }, [brand?.id, brandId, brands, query.data])
 
   function setBrandId(nextBrandId: string) {
     if (!activeBrands.some((item) => item.id === nextBrandId)) return

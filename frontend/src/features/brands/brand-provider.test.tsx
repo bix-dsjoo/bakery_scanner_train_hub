@@ -22,6 +22,11 @@ const activeSecond = {
   id: "brand-2",
   name: "두 번째 베이커리",
 }
+const activeThird = {
+  ...activeFirst,
+  id: "brand-3",
+  name: "세 번째 베이커리",
+}
 const inactive = {
   ...activeFirst,
   id: "brand-old",
@@ -29,7 +34,7 @@ const inactive = {
   status: "INACTIVE" as const,
 }
 
-let brands = [activeFirst, activeSecond, inactive]
+let brands = [activeFirst, activeSecond, activeThird, inactive]
 const server = setupServer(
   http.get("/api/v1/brands", () => HttpResponse.json(brands))
 )
@@ -38,7 +43,7 @@ beforeAll(() => server.listen({ onUnhandledRequest: "error" }))
 afterEach(() => {
   cleanup()
   localStorage.clear()
-  brands = [activeFirst, activeSecond, inactive]
+  brands = [activeFirst, activeSecond, activeThird, inactive]
   server.resetHandlers()
 })
 afterAll(() => server.close())
@@ -109,6 +114,24 @@ describe("BrandProvider", () => {
 
     expect(await screen.findByText(activeSecond.name)).toBeVisible()
     expect(localStorage.getItem("bakery.currentBrandId")).toBe(activeSecond.id)
+  })
+
+  it("preserves list order when a middle current brand becomes inactive", async () => {
+    localStorage.setItem("bakery.currentBrandId", activeSecond.id)
+    const user = userEvent.setup()
+    renderProvider()
+    expect(await screen.findByText(activeSecond.name)).toBeVisible()
+
+    brands = [
+      activeFirst,
+      { ...activeSecond, status: "INACTIVE" },
+      activeThird,
+      inactive,
+    ]
+    await user.click(screen.getByRole("button", { name: "브랜드 새로고침" }))
+
+    expect(await screen.findByText(activeThird.name)).toBeVisible()
+    expect(localStorage.getItem("bakery.currentBrandId")).toBe(activeThird.id)
   })
 
   it("clears persisted state when no active brand remains", async () => {
