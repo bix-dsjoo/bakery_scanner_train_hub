@@ -10,6 +10,9 @@ class Settings(BaseSettings):
 
     data_dir: Path = Path(r"C:\BakeryScannerData")
     database_url: str = ""
+    frontend_dist_dir: Path = (
+        Path(__file__).resolve().parents[2] / "frontend" / "dist"
+    )
 
     @model_validator(mode="after")
     def set_default_database_url(self) -> Self:

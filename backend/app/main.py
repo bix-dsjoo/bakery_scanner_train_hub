@@ -8,6 +8,7 @@ from backend.app.api.catalog import router as catalog_router
 from backend.app.api.errors import register_error_handlers
 from backend.app.config import Settings
 from backend.app.infrastructure.database import create_engine_for
+from backend.app.static import register_spa_routes
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -33,5 +34,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/v1/health")
     def health() -> dict[str, str]:
         return {"status": "ready"}
+
+    register_spa_routes(app, app_settings.frontend_dist_dir)
 
     return app
