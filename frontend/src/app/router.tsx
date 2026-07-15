@@ -2,6 +2,8 @@ import { BrowserRouter, Route, Routes } from "react-router-dom"
 
 import { AppShell } from "@/app/app-shell"
 import { AppProviders } from "@/app/providers"
+import { BrandProvider } from "@/features/brands/brand-provider"
+import { ProductsPage } from "@/pages/products-page"
 
 function PageFrame({ title }: { title: string }) {
   return (
@@ -17,16 +19,18 @@ export function AppRouter() {
   return (
     <AppProviders>
       <BrowserRouter>
-        <Routes>
-          <Route element={<AppShell />}>
-            <Route index element={<PageFrame title="오늘의 작업" />} />
-            <Route path="products" element={<PageFrame title="상품 관리" />} />
-            <Route
-              path="tray-images"
-              element={<PageFrame title="트레이 사진" />}
-            />
-          </Route>
-        </Routes>
+        <BrandProvider>
+          <Routes>
+            <Route element={<AppShell />}>
+              <Route index element={<PageFrame title="오늘의 작업" />} />
+              <Route path="products" element={<ProductsPage />} />
+              <Route
+                path="tray-images"
+                element={<PageFrame title="트레이 사진" />}
+              />
+            </Route>
+          </Routes>
+        </BrandProvider>
       </BrowserRouter>
     </AppProviders>
   )

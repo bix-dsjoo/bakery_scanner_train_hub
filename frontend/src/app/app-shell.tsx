@@ -3,6 +3,7 @@ import { MenuIcon } from "lucide-react"
 import { NavLink, Outlet } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
+import { BrandSelector } from "@/features/brands/brand-selector"
 import {
   Sheet,
   SheetContent,
@@ -79,6 +80,9 @@ export function AppShell() {
                   관리 화면으로 이동합니다.
                 </SheetDescription>
               </SheetHeader>
+              <div className="border-b px-3 py-4">
+                <BrandSelector />
+              </div>
               <div className="px-3 py-4">
                 <NavigationLinks
                   onNavigate={() => setMobileNavigationOpen(false)}
@@ -90,6 +94,9 @@ export function AppShell() {
       </header>
 
       <aside className="hidden border-r bg-sidebar xl:col-start-1 xl:row-start-2 xl:flex xl:flex-col">
+        <div className="border-b px-3 py-4">
+          <BrandSelector />
+        </div>
         <div className="px-3 py-4">
           <NavigationLinks />
         </div>
