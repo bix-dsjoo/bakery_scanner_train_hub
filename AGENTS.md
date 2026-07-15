@@ -12,7 +12,8 @@
 2. `docs/superpowers/specs/2026-07-15-bakery-image-management-design.md`
 3. `docs/superpowers/specs/2026-07-15-image-management-technical-design.md`
 4. `docs/superpowers/specs/2026-07-15-image-management-ui-design.md`
-5. 현재 작업과 관련된 `docs/superpowers/plans/` 아래의 승인된 계획
+5. `docs/superpowers/plans/2026-07-15-image-management-implementation-roadmap.md`
+6. 현재 작업과 관련된 로드맵 단계의 상세 구현 계획
 
 설계 문서는 제품 범위와 데이터 규칙의 소스 오브 트루스입니다. README나 코드가 설계와 충돌하면 임의로 해석하지 말고 설계를 기준으로 차이를 보고합니다.
 
