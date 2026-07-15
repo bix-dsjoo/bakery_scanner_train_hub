@@ -42,7 +42,7 @@ def _write_command_shims(
         "\r\n".join(
             (
                 "@echo off",
-                '>>"%BAKERY_START_DEV_TEST_LOG%" echo uv %*',
+                '>>"%BAKERY_START_DEV_TEST_LOG%" echo uv cwd=%CD% -- %*',
                 'if "%1"=="run" if "%2"=="alembic" '
                 f"exit /b {migration_exit_code}",
                 "exit /b 0",
@@ -68,9 +68,13 @@ def _write_command_shims(
 
 
 def _run_start_dev(shim_dir: Path, event_log: Path) -> subprocess.CompletedProcess[str]:
+    process_temp = shim_dir.parent / "process-temp"
+    process_temp.mkdir()
     environment = os.environ.copy()
     environment["PATH"] = f"{shim_dir}{os.pathsep}{environment['PATH']}"
     environment["BAKERY_START_DEV_TEST_LOG"] = str(event_log)
+    environment["TEMP"] = str(process_temp)
+    environment["TMP"] = str(process_temp)
     command_text = (
         "$OutputEncoding = [Console]::OutputEncoding = "
         "[Text.UTF8Encoding]::new(); "
@@ -106,11 +110,16 @@ def test_start_dev_migrates_after_install_and_before_starting_servers(
     result = _run_start_dev(shim_dir, event_log)
     events = event_log.read_text(encoding="utf-8").splitlines()
 
-    sync_index = events.index("uv sync")
+    uv_at_repository_root = f"uv cwd={REPOSITORY_ROOT} -- "
+    migration_event = f"{uv_at_repository_root}run alembic upgrade head"
+    assert migration_event in events
+    sync_index = events.index(f"{uv_at_repository_root}sync")
     install_index = events.index(f"npm --prefix {REPOSITORY_ROOT / 'frontend'} install")
-    migration_index = events.index("uv run alembic upgrade head")
+    migration_index = events.index(migration_event)
     api_index = next(
-        index for index, event in enumerate(events) if event.startswith("uv run uvicorn ")
+        index
+        for index, event in enumerate(events)
+        if event.startswith(f"{uv_at_repository_root}run uvicorn ")
     )
     frontend_index = next(
         index for index, event in enumerate(events) if event.startswith("npm run dev ")
@@ -121,6 +130,11 @@ def test_start_dev_migrates_after_install_and_before_starting_servers(
     assert install_index < migration_index
     assert migration_index < api_index
     assert migration_index < frontend_index
+    isolated_log_root = tmp_path / "process-temp" / "bakery-scanner-train-hub"
+    assert list(isolated_log_root.glob("api-*.out.log"))
+    assert list(isolated_log_root.glob("api-*.err.log"))
+    assert list(isolated_log_root.glob("frontend-*.out.log"))
+    assert list(isolated_log_root.glob("frontend-*.err.log"))
 
 
 @pytest.mark.skipif(os.name != "nt", reason="PowerShell 실행 계약은 Windows 전용입니다.")
@@ -133,9 +147,12 @@ def test_start_dev_stops_with_actionable_message_when_migration_fails(
     result = _run_start_dev(shim_dir, event_log)
     events = event_log.read_text(encoding="utf-8").splitlines()
     output = result.stdout + result.stderr
+    migration_event = (
+        f"uv cwd={REPOSITORY_ROOT} -- run alembic upgrade head"
+    )
 
     assert result.returncode != 0
-    assert "uv run alembic upgrade head" in events
+    assert migration_event in events
     assert not any("uvicorn" in event for event in events)
     assert not any("npm run dev" in event for event in events)
     assert "데이터베이스" in output
