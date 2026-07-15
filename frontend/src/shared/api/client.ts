@@ -23,9 +23,9 @@ export class ApiClientError extends Error {
   }
 }
 
-async function readErrorBody(response: Response): Promise<ApiErrorBody> {
+function readErrorBody(responseText: string): ApiErrorBody {
   try {
-    return (await response.json()) as ApiErrorBody
+    return JSON.parse(responseText) as ApiErrorBody
   } catch {
     return fallbackError
   }
@@ -36,14 +36,15 @@ export async function apiClient<T>(
   init?: RequestInit
 ): Promise<T> {
   const response = await fetch(path, init)
+  const responseText = await response.text()
 
   if (!response.ok) {
-    throw new ApiClientError(response.status, await readErrorBody(response))
+    throw new ApiClientError(response.status, readErrorBody(responseText))
   }
 
-  if (response.status === 204) {
+  if (responseText.trim().length === 0) {
     return undefined as T
   }
 
-  return (await response.json()) as T
+  return JSON.parse(responseText) as T
 }

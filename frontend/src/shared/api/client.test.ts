@@ -8,6 +8,18 @@ const server = setupServer(
   http.get("http://localhost/api/v1/health", () =>
     HttpResponse.json({ status: "ready" })
   ),
+  http.get("http://localhost/api/v1/empty", () =>
+    new HttpResponse(null, { status: 200 })
+  ),
+  http.post("http://localhost/api/v1/empty", () =>
+    new HttpResponse(null, { status: 201 })
+  ),
+  http.head("http://localhost/api/v1/empty", () =>
+    new HttpResponse(null, { status: 200 })
+  ),
+  http.delete("http://localhost/api/v1/empty", () =>
+    new HttpResponse(null, { status: 204 })
+  ),
   http.post("http://localhost/api/v1/products", () =>
     HttpResponse.json(
       {
@@ -30,6 +42,30 @@ describe("apiClient", () => {
     await expect(
       apiClient<{ status: string }>("http://localhost/api/v1/health")
     ).resolves.toEqual({ status: "ready" })
+  })
+
+  it("returns undefined for an empty 200 response", async () => {
+    await expect(
+      apiClient<void>("http://localhost/api/v1/empty")
+    ).resolves.toBeUndefined()
+  })
+
+  it("returns undefined for an empty 201 response", async () => {
+    await expect(
+      apiClient<void>("http://localhost/api/v1/empty", { method: "POST" })
+    ).resolves.toBeUndefined()
+  })
+
+  it("returns undefined for an empty HEAD response", async () => {
+    await expect(
+      apiClient<void>("http://localhost/api/v1/empty", { method: "HEAD" })
+    ).resolves.toBeUndefined()
+  })
+
+  it("returns undefined for a 204 response", async () => {
+    await expect(
+      apiClient<void>("http://localhost/api/v1/empty", { method: "DELETE" })
+    ).resolves.toBeUndefined()
   })
 
   it("preserves the API error JSON in ApiClientError", async () => {

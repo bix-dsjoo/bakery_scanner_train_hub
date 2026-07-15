@@ -9,6 +9,11 @@ import {
   InputGroupButton,
   InputGroupInput,
 } from "@/components/ui/input-group"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { ChevronDownIcon, XIcon, CheckIcon } from "lucide-react"
 
 const Combobox = ComboboxPrimitive.Root
@@ -34,16 +39,28 @@ function ComboboxTrigger({
   )
 }
 
-function ComboboxClear({ className, ...props }: ComboboxPrimitive.Clear.Props) {
+function ComboboxClear({
+  className,
+  "aria-label": ariaLabel = "선택 지우기",
+  ...props
+}: ComboboxPrimitive.Clear.Props) {
   return (
-    <ComboboxPrimitive.Clear
-      data-slot="combobox-clear"
-      render={<InputGroupButton variant="ghost" size="icon-xs" />}
-      className={cn(className)}
-      {...props}
-    >
-      <XIcon className="pointer-events-none" />
-    </ComboboxPrimitive.Clear>
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <ComboboxPrimitive.Clear
+            data-slot="combobox-clear"
+            render={<InputGroupButton variant="ghost" size="icon-xs" />}
+            className={cn(className)}
+            aria-label={ariaLabel}
+            {...props}
+          >
+            <XIcon className="pointer-events-none" />
+          </ComboboxPrimitive.Clear>
+        }
+      />
+      <TooltipContent>{ariaLabel}</TooltipContent>
+    </Tooltip>
   )
 }
 
@@ -245,16 +262,33 @@ function ComboboxChip({
       {...props}
     >
       {children}
-      {showRemove && (
-        <ComboboxPrimitive.ChipRemove
-          render={<Button variant="ghost" size="icon-xs" />}
-          className="-ml-1 opacity-50 hover:opacity-100"
-          data-slot="combobox-chip-remove"
-        >
-          <XIcon className="pointer-events-none" />
-        </ComboboxPrimitive.ChipRemove>
-      )}
+      {showRemove && <ComboboxChipRemove />}
     </ComboboxPrimitive.Chip>
+  )
+}
+
+function ComboboxChipRemove({
+  className,
+  "aria-label": ariaLabel = "선택 항목 삭제",
+  ...props
+}: ComboboxPrimitive.ChipRemove.Props) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <ComboboxPrimitive.ChipRemove
+            render={<Button variant="ghost" size="icon-xs" />}
+            className={cn("-ml-1 opacity-50 hover:opacity-100", className)}
+            data-slot="combobox-chip-remove"
+            aria-label={ariaLabel}
+            {...props}
+          >
+            <XIcon className="pointer-events-none" />
+          </ComboboxPrimitive.ChipRemove>
+        }
+      />
+      <TooltipContent>{ariaLabel}</TooltipContent>
+    </Tooltip>
   )
 }
 
@@ -288,8 +322,10 @@ export {
   ComboboxSeparator,
   ComboboxChips,
   ComboboxChip,
+  ComboboxChipRemove,
   ComboboxChipsInput,
   ComboboxTrigger,
+  ComboboxClear,
   ComboboxValue,
   useComboboxAnchor,
 }
