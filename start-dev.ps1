@@ -70,6 +70,10 @@ try {
     & $npmCommand.Source --prefix $frontendRoot install
     Assert-LastExitCode "프런트엔드 의존성을 설치하지 못했어요. 네트워크 연결과 npm 오류 메시지를 확인해 주세요."
 
+    Write-Host "데이터베이스를 최신 구조로 준비합니다..."
+    & $uvCommand.Source run alembic upgrade head
+    Assert-LastExitCode "데이터베이스를 준비하지 못했어요. Alembic 오류 메시지에서 원인을 확인하고 수정한 뒤 다시 실행해 주세요."
+
     $apiProcess = Start-Process `
         -FilePath $uvCommand.Source `
         -ArgumentList @(
