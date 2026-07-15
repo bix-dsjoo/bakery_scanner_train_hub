@@ -82,6 +82,7 @@ MVP는 내부망에서 로그인 없이 사용합니다.
 - [이미지 관리 MVP 설계](docs/superpowers/specs/2026-07-15-bakery-image-management-design.md)
 - [이미지 관리 MVP 기술 설계](docs/superpowers/specs/2026-07-15-image-management-technical-design.md)
 - [이미지 관리 MVP UI 디자인](docs/superpowers/specs/2026-07-15-image-management-ui-design.md)
+- [이미지 관리 MVP 구현 로드맵](docs/superpowers/plans/2026-07-15-image-management-implementation-roadmap.md)
 - [문서 기반 구현 계획](docs/superpowers/plans/2026-07-15-documentation-foundation.md)
 - [에이전트 작업 지침](AGENTS.md)
 
