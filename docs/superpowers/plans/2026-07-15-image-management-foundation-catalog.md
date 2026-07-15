@@ -302,11 +302,14 @@ git commit -m "build: scaffold branded React application"
 - Create: `frontend/src/features/brands/api.ts`
 - Create: `frontend/src/features/brands/brand-provider.tsx`
 - Create: `frontend/src/features/brands/brand-selector.tsx`
+- Create: `frontend/src/features/brands/brand-form-dialog.tsx`
+- Create: `frontend/src/features/brands/brand-management-dialog.tsx`
 - Create: `frontend/src/features/products/api.ts`
 - Create: `frontend/src/features/products/product-form-dialog.tsx`
 - Create: `frontend/src/pages/products-page.tsx`
 - Create: `frontend/src/features/brands/brand-provider.test.tsx`
 - Create: `frontend/src/pages/products-page.test.tsx`
+- Modify: `frontend/src/app/app-shell.tsx`
 - Modify: `frontend/src/app/router.tsx`
 
 **Interfaces:**
