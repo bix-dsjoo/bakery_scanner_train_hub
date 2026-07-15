@@ -8,7 +8,7 @@
 
 승인된 상세 설계는 [브랜드별 베이커리 이미지 관리 MVP 설계](docs/superpowers/specs/2026-07-15-bakery-image-management-design.md)에서 확인할 수 있습니다.
 
-구현 기술은 React·TypeScript·FastAPI·Python 3.13·SQLite로 결정했습니다. Windows PC 한 대에서 `start.ps1`로 실행하고 회사 내부망의 브라우저에서 사용합니다. 상세한 실행·저장 구조는 [이미지 관리 MVP 기술 설계](docs/superpowers/specs/2026-07-15-image-management-technical-design.md)를 따릅니다.
+구현 기술은 React·TypeScript·FastAPI·Python 3.13·SQLite로 결정했습니다. UI는 shadcn/ui와 Tailwind CSS 4를 기반으로 BIXOLON 브랜드 색상과 Pretendard를 적용합니다. Windows PC 한 대에서 `start.ps1`로 실행하고 회사 내부망의 브라우저에서 사용합니다. 상세한 실행·저장 구조는 [이미지 관리 MVP 기술 설계](docs/superpowers/specs/2026-07-15-image-management-technical-design.md)를 따릅니다.
 
 ## 사용자
 
@@ -81,6 +81,7 @@ MVP는 내부망에서 로그인 없이 사용합니다.
 
 - [이미지 관리 MVP 설계](docs/superpowers/specs/2026-07-15-bakery-image-management-design.md)
 - [이미지 관리 MVP 기술 설계](docs/superpowers/specs/2026-07-15-image-management-technical-design.md)
+- [이미지 관리 MVP UI 디자인](docs/superpowers/specs/2026-07-15-image-management-ui-design.md)
 - [문서 기반 구현 계획](docs/superpowers/plans/2026-07-15-documentation-foundation.md)
 - [에이전트 작업 지침](AGENTS.md)
 
