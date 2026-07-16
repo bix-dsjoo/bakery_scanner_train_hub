@@ -79,7 +79,12 @@ class ImageRepository:
         return self._record(model)
 
     def commit(self) -> None:
-        self._session.commit()
+        try:
+            self._session.commit()
+        except IntegrityError as error:
+            if self._is_duplicate(error):
+                raise DuplicateImage from error
+            raise
 
     def rollback(self) -> None:
         self._session.rollback()

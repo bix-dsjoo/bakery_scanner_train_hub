@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import io
+import inspect
+import sqlite3
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from sqlalchemy import event, func, select
@@ -14,9 +17,17 @@ from backend.app.config import Settings
 from backend.app.domain.images import ImageKind, LabelingStatus
 from backend.app.infrastructure.catalog_repository import CatalogRepository
 from backend.app.infrastructure.database import create_engine_for
-from backend.app.infrastructure.file_storage import LocalFileStorage
-from backend.app.infrastructure.image_processor import ImageProcessor
-from backend.app.infrastructure.image_repository import DiskSpaceProbe, ImageRepository
+from backend.app.infrastructure.file_storage import (
+    DEFAULT_MAX_BYTES,
+    FileTooLargeError,
+    LocalFileStorage,
+)
+from backend.app.infrastructure.image_processor import ImageProcessor, InvalidImageError
+from backend.app.infrastructure.image_repository import (
+    DiskSpaceProbe,
+    DuplicateImage,
+    ImageRepository,
+)
 from backend.app.infrastructure.models import Base, ImageModel
 
 
@@ -65,12 +76,15 @@ def make_service(
     settings: Settings,
     *,
     disk_space_probe=None,
+    file_storage=None,
+    image_processor=None,
+    image_repository=None,
 ) -> ImageUploadService:
     return ImageUploadService(
         catalog_repository=CatalogRepository(session),
-        image_repository=ImageRepository(session),
-        file_storage=LocalFileStorage(settings),
-        image_processor=ImageProcessor(),
+        image_repository=image_repository or ImageRepository(session),
+        file_storage=file_storage or LocalFileStorage(settings),
+        image_processor=image_processor or ImageProcessor(),
         disk_space_probe=disk_space_probe or AcceptingDiskSpaceProbe(),
     )
 
@@ -86,6 +100,20 @@ def assert_no_request_files(settings: Settings) -> None:
         settings.thumbnails_dir,
     ):
         assert not directory.exists() or not [path for path in directory.rglob("*") if path.is_file()]
+
+
+def test_upload_has_exact_public_signature() -> None:
+    signature = inspect.signature(ImageUploadService.upload)
+
+    assert list(signature.parameters) == [
+        "self",
+        "brand_id",
+        "kind",
+        "product_id",
+        "filename",
+        "stream",
+    ]
+    assert signature.return_annotation == "ImageRecord"
 
 
 def test_product_upload_creates_completed_record_and_real_files(
@@ -301,7 +329,6 @@ def test_low_disk_space_stops_before_reading_stream_or_creating_files(
 @pytest.mark.parametrize(
     ("filename", "fixture_name", "expected_code"),
     [
-        ("too-large.jpg", "valid.jpg", "IMAGE_TOO_LARGE"),
         ("disguised.jpg", "valid.png", "IMAGE_UNSUPPORTED"),
         ("corrupt.jpg", "corrupt.jpg", "IMAGE_CORRUPT"),
     ],
@@ -316,7 +343,6 @@ def test_processing_errors_have_stable_codes_and_clean_imports(
 ) -> None:
     brand = catalog.create_brand("BIXOLON Bakery")
     session.commit()
-    max_bytes = 1 if expected_code == "IMAGE_TOO_LARGE" else 25 * 1024 * 1024
 
     with pytest.raises(ImageUploadError) as caught:
         make_service(session, settings).upload(
@@ -325,11 +351,152 @@ def test_processing_errors_have_stable_codes_and_clean_imports(
             None,
             filename,
             fixture_stream(fixture_name),
-            max_bytes=max_bytes,
         )
 
     assert caught.value.code == expected_code
     assert_no_request_files(settings)
+
+
+def test_too_large_error_uses_the_25_mib_storage_boundary(
+    session: Session, settings: Settings, catalog: CatalogService
+) -> None:
+    brand = catalog.create_brand("BIXOLON Bakery")
+    session.commit()
+
+    class BoundaryStorage(LocalFileStorage):
+        def stream_import(self, stream, *, max_bytes=DEFAULT_MAX_BYTES):
+            assert max_bytes == 25 * 1024 * 1024
+            raise FileTooLargeError("over default boundary")
+
+    with pytest.raises(ImageUploadError) as caught:
+        make_service(
+            session,
+            settings,
+            file_storage=BoundaryStorage(settings),
+        ).upload(brand.id, ImageKind.TRAY, None, "tray.jpg", fixture_stream())
+
+    assert caught.value.code == "IMAGE_TOO_LARGE"
+
+
+def test_partial_thumbnail_is_removed_when_processor_raises(
+    session: Session, settings: Settings, catalog: CatalogService
+) -> None:
+    brand = catalog.create_brand("BIXOLON Bakery")
+    session.commit()
+
+    class PartialWritingProcessor(ImageProcessor):
+        def create_thumbnail(self, source, destination, *, max_edge=512):
+            destination.write_bytes(b"partial thumbnail")
+            raise InvalidImageError("thumbnail failed")
+
+    with pytest.raises(ImageUploadError) as caught:
+        make_service(
+            session,
+            settings,
+            image_processor=PartialWritingProcessor(),
+        ).upload(brand.id, ImageKind.TRAY, None, "tray.jpg", fixture_stream())
+
+    assert caught.value.code == "IMAGE_CORRUPT"
+    assert_no_request_files(settings)
+
+
+def test_thumbnail_collision_preserves_preexisting_file(
+    session: Session,
+    settings: Settings,
+    catalog: CatalogService,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    brand = catalog.create_brand("BIXOLON Bakery")
+    session.commit()
+    settings.imports_dir.mkdir(parents=True)
+    existing = settings.imports_dir / "fixed.thumbnail.webp"
+    existing.write_bytes(b"preexisting thumbnail")
+    monkeypatch.setattr(
+        "backend.app.application.image_upload.uuid4",
+        lambda: SimpleNamespace(hex="fixed"),
+    )
+
+    with pytest.raises(FileExistsError):
+        make_service(session, settings).upload(
+            brand.id, ImageKind.TRAY, None, "tray.jpg", fixture_stream()
+        )
+
+    assert existing.read_bytes() == b"preexisting thumbnail"
+    assert [path for path in settings.imports_dir.iterdir() if path != existing] == []
+
+
+@pytest.mark.parametrize("cleanup_failure", ["resolve", "unlink"])
+def test_rollback_and_one_file_cleanup_failure_preserve_original_error_and_continue(
+    session: Session,
+    settings: Settings,
+    catalog: CatalogService,
+    monkeypatch: pytest.MonkeyPatch,
+    cleanup_failure: str,
+) -> None:
+    brand = catalog.create_brand("BIXOLON Bakery")
+    session.commit()
+    storage = LocalFileStorage(settings)
+    cleanup_started = False
+
+    class FailingRepository:
+        def find_duplicate(self, brand_id, sha256):
+            return None
+
+        def create(self, **kwargs):
+            nonlocal cleanup_started
+            cleanup_started = True
+            raise DuplicateImage
+
+        def commit(self):
+            raise AssertionError("commit must not run")
+
+        def rollback(self):
+            raise RuntimeError("rollback unavailable")
+
+    original_resolve = storage.resolve
+
+    def controlled_resolve(collection, storage_key):
+        if (
+            cleanup_started
+            and cleanup_failure == "resolve"
+            and collection == "thumbnails"
+        ):
+            raise OSError("thumbnail resolve unavailable")
+        return original_resolve(collection, storage_key)
+
+    monkeypatch.setattr(storage, "resolve", controlled_resolve)
+    original_unlink = Path.unlink
+
+    def controlled_unlink(path, *args, **kwargs):
+        if (
+            cleanup_started
+            and cleanup_failure == "unlink"
+            and path.is_relative_to(settings.thumbnails_dir)
+        ):
+            raise OSError("thumbnail unlink unavailable")
+        return original_unlink(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "unlink", controlled_unlink)
+
+    with pytest.raises(ImageUploadError) as caught:
+        make_service(
+            session,
+            settings,
+            file_storage=storage,
+            image_repository=FailingRepository(),
+        ).upload(brand.id, ImageKind.TRAY, None, "tray.jpg", fixture_stream())
+
+    assert caught.value.code == "IMAGE_DUPLICATE"
+    assert not [path for path in settings.originals_dir.rglob("*") if path.is_file()]
+    assert not [path for path in settings.imports_dir.rglob("*") if path.is_file()]
+    remaining_thumbnail = [
+        path for path in settings.thumbnails_dir.rglob("*") if path.is_file()
+    ]
+    assert remaining_thumbnail
+    notes = "\n".join(caught.value.__notes__)
+    assert "rollback" in notes
+    assert "thumbnail final" in notes
+    assert remaining_thumbnail[0].relative_to(settings.thumbnails_dir).as_posix() in notes
 
 
 def test_commit_failure_rolls_back_row_and_removes_promoted_files(
@@ -425,3 +592,26 @@ def test_image_repository_does_not_report_non_duplicate_integrity_errors_as_dupl
             sha256="a" * 64,
             labeling_status=LabelingStatus.UNLABELED,
         )
+
+
+@pytest.mark.parametrize(
+    ("detail", "expected_exception"),
+    [
+        (
+            "UNIQUE constraint failed: images.brand_id, images.sha256",
+            DuplicateImage,
+        ),
+        ("FOREIGN KEY constraint failed", IntegrityError),
+    ],
+)
+def test_commit_only_translates_the_image_brand_hash_unique_violation(
+    detail: str, expected_exception: type[Exception]
+) -> None:
+    class CommitFailingSession:
+        def commit(self) -> None:
+            raise IntegrityError("commit", {}, sqlite3.IntegrityError(detail))
+
+    repository = ImageRepository(CommitFailingSession())  # type: ignore[arg-type]
+
+    with pytest.raises(expected_exception):
+        repository.commit()

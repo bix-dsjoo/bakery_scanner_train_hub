@@ -12,6 +12,7 @@ from backend.app.infrastructure.file_storage import (
     FileTooLargeError,
     ImportedFile,
     LocalFileStorage,
+    StorageCollection,
 )
 from backend.app.infrastructure.image_processor import (
     ImageProcessor,
@@ -88,10 +89,10 @@ class ImageUploadService:
         product_id: str | None,
         filename: str,
         stream: BinaryIO,
-        *,
-        max_bytes: int = DEFAULT_MAX_BYTES,
     ) -> ImageRecord:
-        if not self._disk_space_probe.can_accept(max_bytes, DEFAULT_RESERVE_BYTES):
+        if not self._disk_space_probe.can_accept(
+            DEFAULT_MAX_BYTES, DEFAULT_RESERVE_BYTES
+        ):
             raise self._error("DISK_SPACE_LOW")
         self._validate_product(brand_id, kind, product_id)
 
@@ -101,7 +102,9 @@ class ImageUploadService:
         original_key: Path | None = None
         thumbnail_key: Path | None = None
         try:
-            imported = self._file_storage.stream_import(stream, max_bytes=max_bytes)
+            imported = self._file_storage.stream_import(
+                stream, max_bytes=DEFAULT_MAX_BYTES
+            )
             inspected = self._image_processor.inspect(imported.path, filename)
             if self._image_repository.find_duplicate(brand_id, imported.sha256):
                 raise self._error("IMAGE_DUPLICATE")
@@ -109,8 +112,14 @@ class ImageUploadService:
             thumbnail_path = imported.path.with_name(
                 f"{uuid4().hex}.thumbnail.webp"
             )
-            self._image_processor.create_thumbnail(imported.path, thumbnail_path)
-            thumbnail_created = True
+            thumbnail_existed = thumbnail_path.exists()
+            try:
+                self._image_processor.create_thumbnail(imported.path, thumbnail_path)
+            except BaseException:
+                thumbnail_created = not thumbnail_existed and thumbnail_path.exists()
+                raise
+            else:
+                thumbnail_created = not thumbnail_existed
             original_key = self._file_storage.promote(
                 imported.path,
                 collection="originals",
@@ -147,8 +156,9 @@ class ImageUploadService:
             self._image_repository.commit()
             return record
         except BaseException as error:
-            self._image_repository.rollback()
+            self._best_effort_rollback(error)
             self._compensate(
+                original_error=error,
                 imported=imported,
                 thumbnail_path=thumbnail_path if thumbnail_created else None,
                 original_key=original_key,
@@ -157,7 +167,17 @@ class ImageUploadService:
             translated = self._translate(error)
             if translated is error:
                 raise
+            for note in getattr(error, "__notes__", ()):
+                translated.add_note(note)
             raise translated from error
+
+    def _best_effort_rollback(self, original_error: BaseException) -> None:
+        try:
+            self._image_repository.rollback()
+        except BaseException as cleanup_error:
+            self._record_cleanup_failure(
+                original_error, "database rollback", cleanup_error
+            )
 
     def _validate_product(
         self, brand_id: str, kind: ImageKind, product_id: str | None
@@ -179,28 +199,80 @@ class ImageUploadService:
     def _compensate(
         self,
         *,
+        original_error: BaseException,
         imported: ImportedFile | None,
         thumbnail_path: Path | None,
         original_key: Path | None,
         thumbnail_key: Path | None,
     ) -> None:
-        paths = (
-            self._file_storage.resolve("thumbnails", thumbnail_key)
-            if thumbnail_key is not None
-            else None,
-            self._file_storage.resolve("originals", original_key)
-            if original_key is not None
-            else None,
-            thumbnail_path,
-            imported.path if imported is not None else None,
+        if thumbnail_key is not None:
+            self._delete_storage_file(
+                original_error,
+                collection="thumbnails",
+                storage_key=thumbnail_key,
+                label="thumbnail final file",
+            )
+        if original_key is not None:
+            self._delete_storage_file(
+                original_error,
+                collection="originals",
+                storage_key=original_key,
+                label="original final file",
+            )
+        if thumbnail_path is not None:
+            self._delete_path(
+                original_error, thumbnail_path, "thumbnail temporary file"
+            )
+        if imported is not None:
+            self._delete_path(
+                original_error, imported.path, "original temporary file"
+            )
+
+    def _delete_storage_file(
+        self,
+        original_error: BaseException,
+        *,
+        collection: StorageCollection,
+        storage_key: Path,
+        label: str,
+    ) -> None:
+        try:
+            path = self._file_storage.resolve(collection, storage_key)
+            path.unlink(missing_ok=True)
+        except BaseException as cleanup_error:
+            self._record_cleanup_failure(
+                original_error,
+                f"{label} ({collection}/{storage_key.as_posix()})",
+                cleanup_error,
+            )
+
+    def _delete_path(
+        self, original_error: BaseException, path: Path, label: str
+    ) -> None:
+        try:
+            path.unlink(missing_ok=True)
+        except BaseException as cleanup_error:
+            self._record_cleanup_failure(
+                original_error, f"{label} ({path})", cleanup_error
+            )
+
+    @staticmethod
+    def _record_cleanup_failure(
+        original_error: BaseException, label: str, cleanup_error: BaseException
+    ) -> None:
+        note = (
+            f"Upload compensation failed during {label}: "
+            f"{type(cleanup_error).__name__}: {cleanup_error}"
         )
-        for path in paths:
-            if path is None:
-                continue
-            try:
-                path.unlink(missing_ok=True)
-            except OSError:
-                logger.exception("Failed to compensate upload file %s", path)
+        original_error.add_note(note)
+        logger.error(
+            note,
+            exc_info=(
+                type(cleanup_error),
+                cleanup_error,
+                cleanup_error.__traceback__,
+            ),
+        )
 
     @staticmethod
     def _translate(error: BaseException) -> BaseException:
