@@ -186,18 +186,19 @@ class ImageLibraryService:
             if not self._image_repository.delete(brand_id, image_id):
                 raise self._not_found()
             self._image_repository.commit()
-        except FileNotFoundError as error:
-            self._image_repository.rollback()
-            self._restore(moved, error)
-            raise ImageLibraryError(
-                404,
-                "IMAGE_FILE_MISSING",
-                "이미지 파일을 찾을 수 없어요.",
-                "관리자에게 저장소 상태 확인을 요청해 주세요.",
-            ) from error
         except BaseException as error:
-            self._image_repository.rollback()
+            self._best_effort_rollback(error)
             self._restore(moved, error)
+            if isinstance(error, FileNotFoundError):
+                translated = ImageLibraryError(
+                    404,
+                    "IMAGE_FILE_MISSING",
+                    "이미지 파일을 찾을 수 없어요.",
+                    "관리자에게 저장소 상태 확인을 요청해 주세요.",
+                )
+                for note in getattr(error, "__notes__", ()):
+                    translated.add_note(note)
+                raise translated from error
             raise
 
         for entry in moved:
@@ -210,13 +211,28 @@ class ImageLibraryService:
                     exc_info=error,
                 )
 
+    def _best_effort_rollback(self, original_error: BaseException) -> None:
+        try:
+            self._image_repository.rollback()
+        except BaseException as rollback_error:
+            original_error.add_note(
+                "Image delete rollback failed: "
+                f"{type(rollback_error).__name__}: {rollback_error}"
+            )
+            logger.error(
+                "Image delete database rollback failed",
+                exc_info=rollback_error,
+            )
+
     def _restore(self, moved: list[TrashEntry], original_error: BaseException) -> None:
         for entry in reversed(moved):
             try:
                 self._file_storage.restore_from_trash(entry)
             except BaseException as restore_error:
                 original_error.add_note(
-                    f"Image delete compensation failed: {type(restore_error).__name__}"
+                    "Image delete restore failed for "
+                    f"{entry.collection}: {type(restore_error).__name__}: "
+                    f"{restore_error}"
                 )
                 logger.error(
                     "Image delete compensation failed for %s",
@@ -260,7 +276,14 @@ class ImageLibraryService:
                 raise ValueError("invalid cursor payload")
             created_at = datetime.fromisoformat(payload["created_at"])
             return ImageLibraryService._as_utc(created_at), payload["id"]
-        except (ValueError, TypeError, KeyError, json.JSONDecodeError, binascii.Error) as error:
+        except (
+            ValueError,
+            TypeError,
+            KeyError,
+            OverflowError,
+            json.JSONDecodeError,
+            binascii.Error,
+        ) as error:
             raise ImageLibraryError(
                 422,
                 "IMAGE_CURSOR_INVALID",

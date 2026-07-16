@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import base64
+import json
 import logging
 from collections.abc import Iterator
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
@@ -12,7 +15,12 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from backend.app.config import Settings
-from backend.app.infrastructure.file_storage import LocalFileStorage
+from backend.app.application.image_library import ImageLibraryService
+from backend.app.domain.images import ImageKind, ImageRecord, LabelingStatus
+from backend.app.infrastructure.file_storage import (
+    LocalFileStorage,
+    TrashEntry,
+)
 from backend.app.infrastructure.image_repository import ImageRepository
 from backend.app.infrastructure.models import ImageModel
 from backend.app.main import create_app
@@ -82,6 +90,11 @@ def assert_error_shape(response, code: str, status_code: int) -> None:
     assert response.json()["code"] == code
     assert response.json()["message"]
     assert set(response.json()) <= {"code", "message", "action", "field_errors"}
+
+
+def encode_cursor(created_at: object, image_id: object = "image-1") -> str:
+    payload = json.dumps({"created_at": created_at, "id": image_id}).encode()
+    return base64.urlsafe_b64encode(payload).decode().rstrip("=")
 
 
 def test_actual_multipart_upload_enforces_kind_product_contract_and_detects_mime(
@@ -232,6 +245,77 @@ def test_tampered_cursor_is_rejected_without_internal_details(client: TestClient
     assert response.status_code == 422
 
 
+@pytest.mark.parametrize(
+    "created_at",
+    [
+        "0001-01-01T00:00:00+23:59",
+        "9999-12-31T23:59:59-23:59",
+    ],
+)
+def test_cursor_utc_normalization_range_errors_use_shared_validation_error(
+    client: TestClient, created_at: str
+) -> None:
+    brand = create_brand(client, f"Cursor Range {created_at[:4]}")
+
+    response = client.get(
+        f"/api/v1/brands/{brand['id']}/images",
+        params={"cursor": encode_cursor(created_at)},
+    )
+
+    assert response.status_code == 422
+    assert response.json() == {
+        "code": "IMAGE_CURSOR_INVALID",
+        "message": "목록 위치 정보를 읽을 수 없어요.",
+        "action": "목록을 처음부터 다시 불러와 주세요.",
+        "field_errors": {"cursor": "유효하지 않은 목록 위치예요."},
+    }
+
+
+@pytest.mark.parametrize("created_at", [123, [], "not-a-datetime"])
+def test_cursor_datetime_type_and_parse_errors_use_shared_validation_error(
+    client: TestClient, created_at: object
+) -> None:
+    brand = create_brand(client, f"Cursor Invalid {type(created_at).__name__}")
+
+    response = client.get(
+        f"/api/v1/brands/{brand['id']}/images",
+        params={"cursor": encode_cursor(created_at)},
+    )
+
+    assert_error_shape(response, "IMAGE_CURSOR_INVALID", 422)
+    assert response.json()["field_errors"] == {
+        "cursor": "유효하지 않은 목록 위치예요."
+    }
+
+
+def test_cursor_pagination_preserves_id_desc_order_for_created_at_ties(
+    client: TestClient,
+) -> None:
+    brand = create_brand(client, "Cursor Tie Bakery")
+    uploaded = [
+        upload(client, brand["id"], fixture).json()
+        for fixture in ("valid.jpg", "valid.png", "valid.webp")
+    ]
+    tied_at = datetime(2026, 7, 16, 0, 0, tzinfo=timezone.utc)
+    with Session(client.app.state.session_factory.kw["bind"]) as session:
+        for image in uploaded:
+            model = session.get(ImageModel, image["id"])
+            assert model is not None
+            model.created_at = tied_at
+        session.commit()
+
+    first = client.get(
+        f"/api/v1/brands/{brand['id']}/images", params={"limit": 2}
+    ).json()
+    second = client.get(
+        f"/api/v1/brands/{brand['id']}/images",
+        params={"limit": 2, "cursor": first["next_cursor"]},
+    ).json()
+
+    ids = [item["id"] for item in first["items"] + second["items"]]
+    assert ids == sorted((image["id"] for image in uploaded), reverse=True)
+
+
 def test_list_rejects_product_filter_from_another_brand(client: TestClient) -> None:
     brand = create_brand(client, "Filter Owner Bakery")
     other = create_brand(client, "Filter Other Bakery")
@@ -325,6 +409,29 @@ def test_file_responses_detect_type_escape_filename_and_do_not_leak_paths(
     )
     assert_error_shape(missing, "IMAGE_FILE_MISSING", 404)
     assert str(settings.data_dir) not in missing.text
+
+
+def test_original_content_disposition_encodes_seeded_crlf_filename(
+    client: TestClient,
+) -> None:
+    brand = create_brand(client, "Header Safety Bakery")
+    image = upload(client, brand["id"], "valid.jpg").json()
+    with Session(client.app.state.session_factory.kw["bind"]) as session:
+        model = session.get(ImageModel, image["id"])
+        assert model is not None
+        model.original_filename = 'safe.jpg"\r\nX-Evil: injected'
+        session.commit()
+
+    response = client.get(
+        f"/api/v1/images/{image['id']}/original",
+        params={"brand_id": brand["id"]},
+    )
+
+    disposition = response.headers["content-disposition"]
+    assert response.status_code == 200
+    assert "\r" not in disposition
+    assert "\n" not in disposition
+    assert "x-evil:" not in disposition.lower()
 
 
 def test_product_change_enforces_image_and_product_brand_kind_and_activity(
@@ -442,3 +549,139 @@ def test_delete_trash_cleanup_failure_is_logged_without_failing_request(
 
     assert response.status_code == 204
     assert "trash cleanup failed" in caplog.text.lower()
+
+
+def make_delete_record() -> ImageRecord:
+    now = datetime.now(timezone.utc)
+    return ImageRecord(
+        id="image-1",
+        brand_id="brand-1",
+        kind=ImageKind.TRAY,
+        product_id=None,
+        storage_key="brand-1/aa/bb/original.jpg",
+        thumbnail_storage_key="brand-1/aa/bb/thumbnail.webp",
+        original_filename="tray.jpg",
+        mime_type="image/jpeg",
+        width=10,
+        height=10,
+        byte_size=100,
+        sha256="a" * 64,
+        labeling_status=LabelingStatus.UNLABELED,
+        revision=0,
+        created_at=now,
+        updated_at=now,
+    )
+
+
+class DeleteRepository:
+    def __init__(
+        self,
+        record: ImageRecord,
+        original_error: RuntimeError,
+        rollback_error: RuntimeError | None = None,
+    ) -> None:
+        self.record = record
+        self.original_error = original_error
+        self.rollback_error = rollback_error
+        self.rollback_attempted = False
+
+    def get(self, brand_id: str, image_id: str) -> ImageRecord | None:
+        return self.record
+
+    def delete(self, brand_id: str, image_id: str) -> bool:
+        return True
+
+    def commit(self) -> None:
+        raise self.original_error
+
+    def rollback(self) -> None:
+        self.rollback_attempted = True
+        if self.rollback_error is not None:
+            raise self.rollback_error
+
+
+class DeleteStorage:
+    def __init__(
+        self,
+        *,
+        move_error_at: int | None = None,
+        restore_error_at: int | None = None,
+    ) -> None:
+        self.move_error_at = move_error_at
+        self.restore_error_at = restore_error_at
+        self.moved: list[TrashEntry] = []
+        self.restore_attempts: list[str] = []
+
+    def move_to_trash(self, collection, storage_key) -> TrashEntry:
+        call_number = len(self.moved) + 1
+        if call_number == self.move_error_at:
+            raise RuntimeError("second move failed")
+        entry = TrashEntry(
+            path=Path(f"trash-{call_number}"),
+            collection=collection,
+            storage_key=Path(storage_key),
+        )
+        self.moved.append(entry)
+        return entry
+
+    def restore_from_trash(self, entry: TrashEntry) -> None:
+        self.restore_attempts.append(entry.collection)
+        if len(self.restore_attempts) == self.restore_error_at:
+            raise RuntimeError("restore failed")
+
+    def delete_trash(self, entry: TrashEntry) -> None:
+        raise AssertionError("cleanup is unreachable after delete failure")
+
+
+def make_delete_service(repository: DeleteRepository, storage: DeleteStorage):
+    return ImageLibraryService(
+        catalog_repository=object(),  # type: ignore[arg-type]
+        image_repository=repository,  # type: ignore[arg-type]
+        file_storage=storage,  # type: ignore[arg-type]
+    )
+
+
+def test_delete_rollback_failure_still_restores_both_files_and_preserves_commit_error(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    original = RuntimeError("commit failed")
+    repository = DeleteRepository(
+        make_delete_record(), original, RuntimeError("rollback failed")
+    )
+    storage = DeleteStorage()
+
+    with caplog.at_level(logging.ERROR), pytest.raises(RuntimeError) as caught:
+        make_delete_service(repository, storage).delete("brand-1", "image-1")
+
+    assert caught.value is original
+    assert repository.rollback_attempted
+    assert storage.restore_attempts == ["thumbnails", "originals"]
+    assert any("rollback" in note.lower() for note in original.__notes__)
+
+
+def test_delete_second_move_failure_restores_first_and_preserves_move_error() -> None:
+    original = RuntimeError("unused commit error")
+    repository = DeleteRepository(make_delete_record(), original)
+    storage = DeleteStorage(move_error_at=2)
+
+    with pytest.raises(RuntimeError, match="second move failed") as caught:
+        make_delete_service(repository, storage).delete("brand-1", "image-1")
+
+    assert caught.value is not original
+    assert repository.rollback_attempted
+    assert storage.restore_attempts == ["originals"]
+
+
+def test_delete_restore_failure_does_not_stop_other_restore_or_replace_original(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    original = RuntimeError("commit failed")
+    repository = DeleteRepository(make_delete_record(), original)
+    storage = DeleteStorage(restore_error_at=1)
+
+    with caplog.at_level(logging.ERROR), pytest.raises(RuntimeError) as caught:
+        make_delete_service(repository, storage).delete("brand-1", "image-1")
+
+    assert caught.value is original
+    assert storage.restore_attempts == ["thumbnails", "originals"]
+    assert any("restore" in note.lower() for note in original.__notes__)
