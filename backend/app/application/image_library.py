@@ -83,6 +83,16 @@ class ImageLibraryService:
         limit: int,
     ) -> ImagePage:
         self.require_brand(brand_id)
+        if product_id is not None and self._catalog_repository.get_product(
+            brand_id, product_id
+        ) is None:
+            raise ImageLibraryError(
+                422,
+                "PRODUCT_BRAND_MISMATCH",
+                "현재 브랜드의 상품이 아니에요.",
+                "현재 브랜드의 상품을 선택해 주세요.",
+                {"product_id": "현재 브랜드의 상품을 선택해 주세요."},
+            )
         cursor_created_at, cursor_id = self._decode_cursor(cursor)
         records = self._image_repository.list_page(
             brand_id,

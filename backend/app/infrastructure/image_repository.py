@@ -73,7 +73,9 @@ class ImageRepository:
             statement = statement.where(ImageModel.product_id == product_id)
         if filename is not None:
             statement = statement.where(
-                func.lower(ImageModel.original_filename).contains(filename.lower())
+                func.lower(ImageModel.original_filename).contains(
+                    filename.lower(), autoescape=True
+                )
             )
         if cursor_created_at is not None and cursor_id is not None:
             database_cursor = cursor_created_at.astimezone(timezone.utc).replace(

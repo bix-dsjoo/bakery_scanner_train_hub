@@ -232,6 +232,36 @@ def test_tampered_cursor_is_rejected_without_internal_details(client: TestClient
     assert response.status_code == 422
 
 
+def test_list_rejects_product_filter_from_another_brand(client: TestClient) -> None:
+    brand = create_brand(client, "Filter Owner Bakery")
+    other = create_brand(client, "Filter Other Bakery")
+    foreign_product = create_product(client, other["id"], "FOREIGN", "다른 상품")
+
+    response = client.get(
+        f"/api/v1/brands/{brand['id']}/images",
+        params={"product_id": foreign_product["id"]},
+    )
+
+    assert_error_shape(response, "PRODUCT_BRAND_MISMATCH", 422)
+
+
+def test_filename_filter_treats_like_wildcards_as_literal_text(
+    client: TestClient,
+) -> None:
+    brand = create_brand(client, "Literal Search Bakery")
+    percent_image = upload(
+        client, brand["id"], "valid.png", filename="bread%photo.png"
+    ).json()
+    upload(client, brand["id"], "valid.webp", filename="plain-photo.webp")
+
+    response = client.get(
+        f"/api/v1/brands/{brand['id']}/images", params={"filename": "%"}
+    )
+
+    assert response.status_code == 200
+    assert response.json()["items"] == [percent_image]
+
+
 def test_detail_files_and_delete_require_matching_brand(client: TestClient) -> None:
     owner = create_brand(client, "Owner Bakery")
     other = create_brand(client, "Other Bakery")
