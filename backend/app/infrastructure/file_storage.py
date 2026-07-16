@@ -129,4 +129,3 @@ class LocalFileStorage:
     def _validate_component(value: str, name: str) -> None:
         if not value or value in {".", ".."} or Path(value).name != value:
             raise ValueError(f"{name} must be a single path component")
-

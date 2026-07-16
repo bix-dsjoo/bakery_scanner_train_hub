@@ -108,4 +108,3 @@ def test_trash_move_restore_and_delete_are_reversible(
     trash_entry = storage.move_to_trash("originals", storage_key)
     storage.delete_trash(trash_entry)
     assert not trash_entry.path.exists()
-
