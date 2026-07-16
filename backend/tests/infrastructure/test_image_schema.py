@@ -174,13 +174,26 @@ def test_image_foreign_keys_restrict_catalog_deletion(migrated_engine):
     with migrated_engine.begin() as connection:
         insert_catalog(connection)
         insert_image(connection)
+        connection.exec_driver_sql(
+            "INSERT INTO brands (id, name) VALUES (?, ?)",
+            ("brand-2", "Tray Bakery"),
+        )
+        insert_image(
+            connection,
+            id="image-2",
+            brand_id="brand-2",
+            kind="TRAY",
+            product_id=None,
+            sha256="b" * 64,
+            labeling_status="UNLABELED",
+        )
 
     with pytest.raises(IntegrityError), migrated_engine.begin() as connection:
         connection.exec_driver_sql(
             "DELETE FROM products WHERE id = ?", ("product-1",)
         )
     with pytest.raises(IntegrityError), migrated_engine.begin() as connection:
-        connection.exec_driver_sql("DELETE FROM brands WHERE id = ?", ("brand-1",))
+        connection.exec_driver_sql("DELETE FROM brands WHERE id = ?", ("brand-2",))
 
 
 def test_image_model_defaults_revision_to_zero(model_engine):
@@ -240,17 +253,41 @@ def make_record(**overrides) -> ImageRecord:
     return ImageRecord(**values)
 
 
-def test_image_record_is_immutable_and_validates_product_link():
+def test_image_record_is_immutable():
     record = make_record()
     with pytest.raises(FrozenInstanceError):
         record.revision = 1  # type: ignore[misc]
 
+
+def test_image_record_accepts_valid_product_and_tray_links():
+    make_record()
     make_record(
         kind=ImageKind.TRAY,
         product_id=None,
         labeling_status=LabelingStatus.UNLABELED,
     )
-    with pytest.raises(ValueError):
-        make_record(product_id=None)
-    with pytest.raises(ValueError):
+
+
+@pytest.mark.parametrize("product_id", [None, "", "   ", 123])
+def test_product_image_requires_nonblank_string_product_id(product_id):
+    with pytest.raises(
+        ValueError, match="PRODUCT images require a nonblank product_id"
+    ):
+        make_record(product_id=product_id)
+
+
+def test_tray_image_requires_product_id_to_be_none():
+    with pytest.raises(ValueError, match="TRAY images must not have product_id"):
         make_record(kind=ImageKind.TRAY)
+
+
+def test_image_record_requires_image_kind_enum():
+    with pytest.raises(ValueError, match="kind must be an ImageKind"):
+        make_record(kind="INVALID")
+
+
+def test_image_record_requires_labeling_status_enum():
+    with pytest.raises(
+        ValueError, match="labeling_status must be a LabelingStatus"
+    ):
+        make_record(labeling_status="INVALID")

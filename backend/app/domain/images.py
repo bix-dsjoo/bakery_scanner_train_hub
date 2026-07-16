@@ -33,7 +33,13 @@ class ImageRecord:
     updated_at: datetime
 
     def __post_init__(self) -> None:
-        if self.kind == ImageKind.PRODUCT and self.product_id is None:
-            raise ValueError("PRODUCT images require product_id")
+        if not isinstance(self.kind, ImageKind):
+            raise ValueError("kind must be an ImageKind")
+        if not isinstance(self.labeling_status, LabelingStatus):
+            raise ValueError("labeling_status must be a LabelingStatus")
+        if self.kind == ImageKind.PRODUCT and (
+            not isinstance(self.product_id, str) or not self.product_id.strip()
+        ):
+            raise ValueError("PRODUCT images require a nonblank product_id")
         if self.kind == ImageKind.TRAY and self.product_id is not None:
             raise ValueError("TRAY images must not have product_id")
