@@ -4,7 +4,7 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -38,6 +38,88 @@ class ImageRepository:
             )
         )
         return self._record(model) if model is not None else None
+
+    def get(self, brand_id: str, image_id: str) -> ImageRecord | None:
+        model = self._session.scalar(
+            select(ImageModel).where(
+                ImageModel.id == image_id,
+                ImageModel.brand_id == brand_id,
+            )
+        )
+        return self._record(model) if model is not None else None
+
+    def list_page(
+        self,
+        brand_id: str,
+        *,
+        kind: ImageKind | None,
+        labeling_status: LabelingStatus | None,
+        product_id: str | None,
+        filename: str | None,
+        cursor_created_at: datetime | None,
+        cursor_id: str | None,
+        limit: int,
+    ) -> list[ImageRecord]:
+        statement: Select[tuple[ImageModel]] = select(ImageModel).where(
+            ImageModel.brand_id == brand_id
+        )
+        if kind is not None:
+            statement = statement.where(ImageModel.kind == kind.value)
+        if labeling_status is not None:
+            statement = statement.where(
+                ImageModel.labeling_status == labeling_status.value
+            )
+        if product_id is not None:
+            statement = statement.where(ImageModel.product_id == product_id)
+        if filename is not None:
+            statement = statement.where(
+                func.lower(ImageModel.original_filename).contains(filename.lower())
+            )
+        if cursor_created_at is not None and cursor_id is not None:
+            database_cursor = cursor_created_at.astimezone(timezone.utc).replace(
+                tzinfo=None
+            )
+            statement = statement.where(
+                or_(
+                    ImageModel.created_at < database_cursor,
+                    (
+                        (ImageModel.created_at == database_cursor)
+                        & (ImageModel.id < cursor_id)
+                    ),
+                )
+            )
+        statement = statement.order_by(
+            ImageModel.created_at.desc(), ImageModel.id.desc()
+        ).limit(limit)
+        return [self._record(model) for model in self._session.scalars(statement)]
+
+    def set_product(
+        self, brand_id: str, image_id: str, product_id: str
+    ) -> ImageRecord | None:
+        model = self._session.scalar(
+            select(ImageModel).where(
+                ImageModel.id == image_id,
+                ImageModel.brand_id == brand_id,
+            )
+        )
+        if model is None:
+            return None
+        model.product_id = product_id
+        self._session.flush()
+        return self._record(model)
+
+    def delete(self, brand_id: str, image_id: str) -> bool:
+        model = self._session.scalar(
+            select(ImageModel).where(
+                ImageModel.id == image_id,
+                ImageModel.brand_id == brand_id,
+            )
+        )
+        if model is None:
+            return False
+        self._session.delete(model)
+        self._session.flush()
+        return True
 
     def create(
         self,

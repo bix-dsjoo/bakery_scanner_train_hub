@@ -6,6 +6,7 @@ from sqlalchemy.orm import sessionmaker
 
 from backend.app.api.catalog import router as catalog_router
 from backend.app.api.errors import register_error_handlers
+from backend.app.api.images import router as images_router
 from backend.app.config import Settings
 from backend.app.infrastructure.database import create_engine_for
 from backend.app.static import register_spa_routes
@@ -30,6 +31,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.session_factory = session_factory
     register_error_handlers(app)
     app.include_router(catalog_router)
+    app.include_router(images_router)
 
     @app.get("/api/v1/health")
     def health() -> dict[str, str]:
