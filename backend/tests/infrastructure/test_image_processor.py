@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import pytest
+from PIL import Image
 
 from backend.app.infrastructure.image_processor import (
     ImageProcessor,
@@ -84,3 +85,59 @@ def test_create_thumbnail_removes_partial_output_on_failure(tmp_path: Path) -> N
         ImageProcessor().create_thumbnail(FIXTURES / "corrupt.jpg", output)
 
     assert not output.exists()
+
+
+@pytest.mark.parametrize("max_pixels", [150_000, 100_000])
+def test_inspect_rejects_decompression_bombs(
+    monkeypatch: pytest.MonkeyPatch, max_pixels: int
+) -> None:
+    monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", max_pixels)
+
+    with pytest.raises(InvalidImageError, match="safe pixel limit"):
+        ImageProcessor().inspect(FIXTURES / "valid.jpg", "valid.jpg")
+
+
+@pytest.mark.parametrize("max_pixels", [150_000, 100_000])
+def test_create_thumbnail_rejects_decompression_bombs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, max_pixels: int
+) -> None:
+    output = tmp_path / "thumbnail"
+    monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", max_pixels)
+
+    with pytest.raises(InvalidImageError, match="safe pixel limit"):
+        ImageProcessor().create_thumbnail(FIXTURES / "valid.jpg", output)
+
+    assert not output.exists()
+
+
+def test_create_thumbnail_preserves_existing_destination(tmp_path: Path) -> None:
+    output = tmp_path / "thumbnail"
+    output.write_bytes(b"existing thumbnail")
+
+    with pytest.raises(FileExistsError):
+        ImageProcessor().create_thumbnail(FIXTURES / "valid.jpg", output)
+
+    assert output.read_bytes() == b"existing thumbnail"
+    assert list(tmp_path.glob(".thumbnail.*.tmp")) == []
+
+
+def test_create_thumbnail_cleans_request_temp_after_unexpected_save_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class UnexpectedSaveFailure(BaseException):
+        pass
+
+    output = tmp_path / "thumbnail"
+    output.write_bytes(b"existing thumbnail")
+
+    def fail_after_partial_write(_image, destination, **_kwargs) -> None:
+        Path(destination).write_bytes(b"partial thumbnail")
+        raise UnexpectedSaveFailure
+
+    monkeypatch.setattr(Image.Image, "save", fail_after_partial_write)
+
+    with pytest.raises(UnexpectedSaveFailure):
+        ImageProcessor().create_thumbnail(FIXTURES / "valid.jpg", output)
+
+    assert output.read_bytes() == b"existing thumbnail"
+    assert list(tmp_path.glob(".thumbnail.*.tmp")) == []

@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+import os
+import tempfile
+import warnings
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Iterator
 
 from PIL import Image, ImageOps, UnidentifiedImageError
 
@@ -39,12 +44,18 @@ class Thumbnail:
 class ImageProcessor:
     def inspect(self, path: Path, original_filename: str) -> InspectedImage:
         try:
-            with Image.open(path) as image:
-                image_format = image.format
-                image.verify()
-            with Image.open(path) as image:
-                image.load()
-                width, height = image.size
+            with reject_decompression_bombs():
+                with Image.open(path) as image:
+                    image_format = image.format
+                    image.verify()
+                with Image.open(path) as image:
+                    image.load()
+                    width, height = image.size
+        except (
+            Image.DecompressionBombWarning,
+            Image.DecompressionBombError,
+        ) as error:
+            raise InvalidImageError("image exceeds the safe pixel limit") from error
         except (UnidentifiedImageError, OSError, SyntaxError, ValueError) as error:
             raise InvalidImageError("file is not a decodable image") from error
 
@@ -66,23 +77,67 @@ class ImageProcessor:
         if max_edge <= 0:
             raise ValueError("max_edge must be positive")
         destination.parent.mkdir(parents=True, exist_ok=True)
+        with tempfile.NamedTemporaryFile(
+            dir=destination.parent,
+            prefix=f".{destination.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as temporary_file:
+            temporary_path = Path(temporary_file.name)
+
         try:
-            with Image.open(source) as image:
-                if image.format not in FORMAT_DETAILS:
-                    raise UnsupportedImageError(
-                        "image format must be JPEG, PNG, or WebP"
-                    )
-                image.load()
-                thumbnail = ImageOps.exif_transpose(image)
-                thumbnail.thumbnail((max_edge, max_edge), Image.Resampling.LANCZOS)
-                if thumbnail.mode not in {"RGB", "RGBA"}:
-                    thumbnail = thumbnail.convert("RGBA" if "A" in thumbnail.getbands() else "RGB")
-                thumbnail.save(destination, format="WEBP")
-                width, height = thumbnail.size
-        except UnsupportedImageError:
-            destination.unlink(missing_ok=True)
-            raise
-        except (UnidentifiedImageError, OSError, SyntaxError, ValueError) as error:
-            destination.unlink(missing_ok=True)
-            raise InvalidImageError("file is not a decodable image") from error
+            try:
+                with reject_decompression_bombs():
+                    with Image.open(source) as image:
+                        if image.format not in FORMAT_DETAILS:
+                            raise UnsupportedImageError(
+                                "image format must be JPEG, PNG, or WebP"
+                            )
+                        image.load()
+                        thumbnail = ImageOps.exif_transpose(image)
+                        thumbnail.thumbnail(
+                            (max_edge, max_edge), Image.Resampling.LANCZOS
+                        )
+                        if thumbnail.mode not in {"RGB", "RGBA"}:
+                            mode = "RGBA" if "A" in thumbnail.getbands() else "RGB"
+                            thumbnail = thumbnail.convert(mode)
+                        thumbnail.save(temporary_path, format="WEBP")
+                        width, height = thumbnail.size
+                    self._verify_thumbnail(temporary_path)
+            except UnsupportedImageError:
+                raise
+            except (
+                Image.DecompressionBombWarning,
+                Image.DecompressionBombError,
+            ) as error:
+                raise InvalidImageError(
+                    "image exceeds the safe pixel limit"
+                ) from error
+            except (UnidentifiedImageError, OSError, SyntaxError, ValueError) as error:
+                raise InvalidImageError("file is not a decodable image") from error
+
+            self._publish_without_overwrite(temporary_path, destination)
+        finally:
+            temporary_path.unlink(missing_ok=True)
         return Thumbnail(path=destination, width=width, height=height)
+
+    @staticmethod
+    def _verify_thumbnail(path: Path) -> None:
+        with Image.open(path) as image:
+            if image.format != "WEBP":
+                raise InvalidImageError("thumbnail is not WebP")
+            image.verify()
+        with Image.open(path) as image:
+            image.load()
+
+    @staticmethod
+    def _publish_without_overwrite(source: Path, destination: Path) -> None:
+        os.link(source, destination)
+        source.unlink()
+
+
+@contextmanager
+def reject_decompression_bombs() -> Iterator[None]:
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", Image.DecompressionBombWarning)
+        yield
