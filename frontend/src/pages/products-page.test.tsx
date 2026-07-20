@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event"
 import { HttpResponse, http } from "msw"
 import { setupServer } from "msw/node"
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest"
+import { MemoryRouter } from "react-router-dom"
 
 import { BrandProvider } from "@/features/brands/brand-provider"
 import { BrandSelector } from "@/features/brands/brand-selector"
@@ -145,8 +146,10 @@ function renderCatalog() {
     <QueryClientProvider client={queryClient}>
       <BrandProvider>
         <TooltipProvider delay={0}>
-          <BrandSelector />
-          <ProductsPage />
+          <MemoryRouter>
+            <BrandSelector />
+            <ProductsPage />
+          </MemoryRouter>
         </TooltipProvider>
       </BrandProvider>
     </QueryClientProvider>

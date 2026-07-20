@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { BanIcon, PencilIcon, PlusIcon, SearchIcon } from "lucide-react"
+import { Link } from "react-router-dom"
 
 import {
   AlertDialog,
@@ -188,7 +189,12 @@ export function ProductsPage() {
                   <div className="min-w-0 flex-1 sm:grid sm:grid-cols-[minmax(0,1.5fr)_minmax(8rem,0.8fr)] sm:items-center sm:gap-6">
                     <div className="min-w-0">
                       <div className="flex min-w-0 items-center gap-2">
-                        <span className="truncate font-medium">{product.name}</span>
+                        <Link
+                          to={`/products/${encodeURIComponent(product.id)}`}
+                          className="truncate font-medium underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-ring"
+                        >
+                          {product.name}
+                        </Link>
                         {product.status === "INACTIVE" && (
                           <Badge variant="secondary">비활성</Badge>
                         )}
