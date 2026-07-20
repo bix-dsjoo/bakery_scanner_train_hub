@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { PlusIcon, Trash2Icon } from "lucide-react"
 import { Link } from "react-router-dom"
@@ -29,11 +29,15 @@ export function TrayImagesPage() {
   const queryClient = useQueryClient()
   const [status, setStatus] = useState<LabelingStatus>("UNLABELED")
   const [filename, setFilename] = useState("")
-  const [productId, setProductId] = useState("ALL")
+  const [productFilter, setProductFilter] = useState({ brandId: brand?.id ?? null, value: "ALL" })
   const [uploadedImageId, setUploadedImageId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState<ImageRecord | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
+  const currentBrandIdRef = useRef(brand?.id)
+  currentBrandIdRef.current = brand?.id
+  const productId = productFilter.brandId === brand?.id ? productFilter.value : "ALL"
   useEffect(() => {
+    setProductFilter({ brandId: brand?.id ?? null, value: "ALL" })
     setUploadedImageId(null)
     setDeleting(null)
     setDeleteError(null)
@@ -60,21 +64,26 @@ export function TrayImagesPage() {
   const images = imagesQuery.data?.pages.flatMap((page) => page.items) ?? []
   const filtered = Boolean(filename.trim() || productId !== "ALL")
   const remove = useMutation({
-    mutationFn: (imageId: string) => deleteImage(brand!.id, imageId),
-    onSuccess: async () => {
+    mutationFn: ({ brandId, imageId }: { brandId: string; imageId: string }) => deleteImage(brandId, imageId),
+    onSuccess: async (_, variables) => {
+      if (currentBrandIdRef.current !== variables.brandId) return
       setDeleting(null)
       setDeleteError(null)
-      await queryClient.invalidateQueries({ queryKey: ["images", brand!.id] })
+      await queryClient.invalidateQueries({ queryKey: ["images", variables.brandId] })
     },
-    onError: (error) => setDeleteError(error instanceof ApiClientError
-      ? `${error.body.message} ${error.body.action ?? "잠시 후 다시 시도해 주세요."}`
-      : "트레이 사진을 삭제하지 못했어요. 서버 연결을 확인한 뒤 다시 시도해 주세요."),
+    onError: (error, variables) => {
+      if (currentBrandIdRef.current !== variables.brandId) return
+      setDeleteError(error instanceof ApiClientError
+        ? `${error.body.message} ${error.body.action ?? "잠시 후 다시 시도해 주세요."}`
+        : "트레이 사진을 삭제하지 못했어요. 서버 연결을 확인한 뒤 다시 시도해 주세요.")
+    },
   })
 
-  async function handleUploadComplete(results: readonly UploadResult[]) {
+  async function handleUploadComplete(uploadBrandId: string, results: readonly UploadResult[]) {
+    if (currentBrandIdRef.current !== uploadBrandId) return
     const firstSuccess = results.find((result) => result.status === "success" && result.image)
     setUploadedImageId(firstSuccess?.image?.id ?? null)
-    if (brand) await queryClient.invalidateQueries({ queryKey: ["images", brand.id] })
+    await queryClient.invalidateQueries({ queryKey: ["images", uploadBrandId] })
   }
 
   if (brandLoading) return <PageState title="브랜드를 불러오는 중이에요" />
@@ -86,7 +95,7 @@ export function TrayImagesPage() {
       <div className="mx-auto max-w-6xl">
         <header className="flex flex-col gap-5 border-b pb-6 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0"><p className="mb-1 truncate text-xs font-medium text-muted-foreground">{brand.name}</p><h1 className="text-2xl leading-8 font-bold tracking-[-0.02em]">트레이 사진</h1><p className="mt-1 text-sm text-muted-foreground">라벨이 필요한 사진을 찾아 작업을 시작합니다.</p></div>
-          <UploadDialog brandId={brand.id} kind="TRAY" onComplete={handleUploadComplete}>
+          <UploadDialog key={brand.id} brandId={brand.id} kind="TRAY" onComplete={(results) => handleUploadComplete(brand.id, results)}>
             <Button size="lg"><PlusIcon /> 트레이 사진 올리기</Button>
           </UploadDialog>
         </header>
@@ -104,11 +113,10 @@ export function TrayImagesPage() {
             <TabsTrigger value="COMPLETED">완료</TabsTrigger>
           </TabsList>
         </Tabs>
-        <ImageFilters filename={filename} onFilenameChange={setFilename} productId={productId} onProductChange={setProductId} products={productsQuery.data ?? []} />
+        <ImageFilters filename={filename} onFilenameChange={setFilename} productId={productId} onProductChange={(value) => setProductFilter({ brandId: brand.id, value })} products={(productsQuery.data ?? []).filter((product) => product.brand_id === brand.id && product.status === "ACTIVE")} />
 
         <section aria-labelledby="tray-images-heading">
           <div className="flex h-11 items-center justify-between border-b text-xs font-medium text-muted-foreground"><h2 id="tray-images-heading">사진 목록</h2><span className="tabular-nums">{images.length}장</span></div>
-          {deleteError && <p role="alert" className="border-b py-3 text-sm text-destructive">{deleteError}</p>}
           {imagesQuery.error ? (
             <PageState title="트레이 사진을 불러오지 못했어요" description="서버 연결을 확인한 뒤 다시 시도해 주세요." compact />
           ) : (
@@ -117,18 +125,19 @@ export function TrayImagesPage() {
               images={images}
               loading={imagesQuery.isLoading}
               empty={filtered
-                ? <PageState title="조건에 맞는 사진이 없어요" description="검색어나 상품 조건을 바꿔 주세요." compact action={<Button variant="outline" onClick={() => { setFilename(""); setProductId("ALL") }}>필터 초기화</Button>} />
+                ? <PageState title="조건에 맞는 사진이 없어요" description="검색어나 상품 조건을 바꿔 주세요." compact action={<Button variant="outline" onClick={() => { setFilename(""); setProductFilter({ brandId: brand.id, value: "ALL" }) }}>필터 초기화</Button>} />
                 : <PageState title={status === "UNLABELED" ? "라벨링할 트레이 사진이 없어요" : "완료한 트레이 사진이 없어요"} description="트레이 사진을 올리면 이곳에서 찾을 수 있어요." compact />}
-              renderActions={(image) => <Button variant="destructive" size="icon-sm" aria-label={`${image.original_filename} 삭제`} onClick={() => setDeleting(image)}><Trash2Icon /></Button>}
+              renderActions={(image) => <Button variant="destructive" size="icon-sm" aria-label={`${image.original_filename} 삭제`} onClick={() => { setDeleteError(null); setDeleting(image) }}><Trash2Icon /></Button>}
             />
           )}
           {imagesQuery.hasNextPage && <div className="flex justify-center border-t py-5"><Button variant="outline" onClick={() => imagesQuery.fetchNextPage()} disabled={imagesQuery.isFetchingNextPage}>{imagesQuery.isFetchingNextPage ? "불러오는 중" : "다음 사진 불러오기"}</Button></div>}
         </section>
       </div>
-      <AlertDialog open={Boolean(deleting)} onOpenChange={(open) => !open && setDeleting(null)}>
+      <AlertDialog open={Boolean(deleting)} onOpenChange={(open) => { if (!open && !remove.isPending) setDeleting(null) }}>
         <AlertDialogContent>
           <AlertDialogHeader><AlertDialogTitle>트레이 사진 삭제</AlertDialogTitle><AlertDialogDescription>사진 1장과 박스 {deleting?.box_count ?? 0}개가 함께 삭제돼요. 삭제한 사진은 되돌릴 수 없어요.</AlertDialogDescription></AlertDialogHeader>
-          <AlertDialogFooter><AlertDialogCancel>취소</AlertDialogCancel><AlertDialogAction variant="destructive" onClick={() => deleting && remove.mutate(deleting.id)}>삭제</AlertDialogAction></AlertDialogFooter>
+          {deleteError && <p role="alert" className="text-sm text-destructive">{deleteError}</p>}
+          <AlertDialogFooter><AlertDialogCancel disabled={remove.isPending}>취소</AlertDialogCancel><AlertDialogAction variant="destructive" disabled={remove.isPending} onClick={() => deleting && !remove.isPending && remove.mutate({ brandId: brand.id, imageId: deleting.id })}>{remove.isPending ? "삭제 중" : "삭제"}</AlertDialogAction></AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </div>

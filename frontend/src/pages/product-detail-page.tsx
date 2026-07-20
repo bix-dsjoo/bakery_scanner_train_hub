@@ -1,5 +1,5 @@
-import { useState } from "react"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useEffect, useRef, useState } from "react"
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { ArrowLeftIcon, PlusIcon, Trash2Icon } from "lucide-react"
 import { Link, useParams } from "react-router-dom"
 
@@ -40,50 +40,64 @@ export function ProductDetailPage() {
   const queryClient = useQueryClient()
   const [deleting, setDeleting] = useState<ImageRecord | null>(null)
   const [actionError, setActionError] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const currentBrandIdRef = useRef(brand?.id)
+  currentBrandIdRef.current = brand?.id
+  useEffect(() => {
+    setDeleting(null)
+    setActionError(null)
+    setDeleteError(null)
+  }, [brand?.id])
   const imageFilters = { kind: "PRODUCT" as const, productId, limit: 100 }
   const productsQuery = useQuery({
     queryKey: productsQueryKey(brand?.id ?? ""),
     queryFn: () => listProducts(brand!.id),
     enabled: Boolean(brand),
   })
-  const imagesQuery = useQuery({
+  const imagesQuery = useInfiniteQuery({
     queryKey: imagesQueryKey(brand?.id ?? "", imageFilters),
-    queryFn: () => listImages(brand!.id, imageFilters),
+    queryFn: ({ pageParam }) => listImages(brand!.id, { ...imageFilters, cursor: pageParam }),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.next_cursor ?? undefined,
     enabled: Boolean(brand && productId),
   })
   const product = productsQuery.data?.find((item) => item.id === productId)
-  const activeProducts = productsQuery.data?.filter((item) => item.status === "ACTIVE") ?? []
+  const activeProducts = productsQuery.data?.filter((item) => item.brand_id === brand?.id && item.status === "ACTIVE") ?? []
 
   const reassign = useMutation({
-    mutationFn: ({ imageId, nextProductId }: { imageId: string; nextProductId: string }) =>
-      changeImageProduct(brand!.id, imageId, nextProductId),
-    onSuccess: async () => {
+    mutationFn: ({ brandId, imageId, nextProductId }: { brandId: string; imageId: string; nextProductId: string }) =>
+      changeImageProduct(brandId, imageId, nextProductId),
+    onSuccess: async (_, variables) => {
+      if (currentBrandIdRef.current !== variables.brandId) return
       setActionError(null)
-      await queryClient.invalidateQueries({ queryKey: ["images", brand!.id] })
+      await queryClient.invalidateQueries({ queryKey: ["images", variables.brandId] })
     },
-    onError: showActionError,
+    onError: (error, variables) => {
+      if (currentBrandIdRef.current === variables.brandId) showActionError(error)
+    },
   })
   const remove = useMutation({
-    mutationFn: (imageId: string) => deleteImage(brand!.id, imageId),
-    onSuccess: async () => {
+    mutationFn: ({ brandId, imageId }: { brandId: string; imageId: string }) => deleteImage(brandId, imageId),
+    onSuccess: async (_, variables) => {
+      if (currentBrandIdRef.current !== variables.brandId) return
       setDeleting(null)
-      setActionError(null)
-      await queryClient.invalidateQueries({ queryKey: ["images", brand!.id] })
+      setDeleteError(null)
+      await queryClient.invalidateQueries({ queryKey: ["images", variables.brandId] })
     },
-    onError: showActionError,
+    onError: (error, variables) => {
+      if (currentBrandIdRef.current === variables.brandId) setDeleteError(toActionError(error, "상품 사진을 삭제하지 못했어요."))
+    },
   })
 
   function showActionError(error: unknown) {
-    setActionError(error instanceof ApiClientError
-      ? `${error.body.message} ${error.body.action ?? "잠시 후 다시 시도해 주세요."}`
-      : "사진을 변경하지 못했어요. 서버 연결을 확인한 뒤 다시 시도해 주세요.")
+    setActionError(toActionError(error, "사진을 변경하지 못했어요."))
   }
 
   if (brandLoading || productsQuery.isLoading) return <PageState title="상품을 불러오는 중이에요" />
   if (brandError || productsQuery.error) return <PageState title="상품을 불러오지 못했어요" description="서버 연결을 확인한 뒤 페이지를 새로고침해 주세요." />
   if (!brand || !product) return <PageState title="상품을 찾을 수 없어요" description="현재 브랜드의 상품 목록에서 다시 선택해 주세요." />
 
-  const images = imagesQuery.data?.items ?? []
+  const images = imagesQuery.data?.pages.flatMap((page) => page.items) ?? []
   return (
     <div className="px-5 py-8 sm:px-8 sm:py-10">
       <div className="mx-auto max-w-6xl">
@@ -97,10 +111,11 @@ export function ProductDetailPage() {
             <p className="mt-1 text-sm text-muted-foreground">분류기 학습에 사용할 상품 사진을 관리합니다.</p>
           </div>
           <UploadDialog
+            key={brand.id}
             brandId={brand.id}
             kind="PRODUCT"
             productId={product.id}
-            onComplete={() => queryClient.invalidateQueries({ queryKey: ["images", brand.id] })}
+            onComplete={() => currentBrandIdRef.current === brand.id && queryClient.invalidateQueries({ queryKey: ["images", brand.id] })}
           >
             <Button size="lg"><PlusIcon /> 상품 사진 추가</Button>
           </UploadDialog>
@@ -111,42 +126,54 @@ export function ProductDetailPage() {
           <div className="flex h-11 items-center justify-between border-b text-xs font-medium text-muted-foreground">
             <h2 id="product-images-heading">상품 사진</h2><span className="tabular-nums">{images.length}장</span>
           </div>
-          <ImageList
+          {imagesQuery.error ? (
+            <p role="alert" className="py-14 text-center text-sm text-destructive">
+              {toActionError(imagesQuery.error, "상품 사진을 불러오지 못했어요.")}
+            </p>
+          ) : <ImageList
             brandId={brand.id}
             images={images}
             loading={imagesQuery.isLoading}
             empty={<PageState title="등록된 상품 사진이 없어요" description="이 상품을 잘 보여주는 사진을 올려 주세요." compact />}
             renderActions={(image) => (
-              <div className="flex shrink-0 items-center gap-2">
+              <div className="flex min-w-0 shrink items-center gap-1 sm:shrink-0 sm:gap-2">
                 <Select
                   value={image.product_id ?? undefined}
-                  onValueChange={(nextProductId) => nextProductId && reassign.mutate({ imageId: image.id, nextProductId })}
+                  onValueChange={(nextProductId) => nextProductId && reassign.mutate({ brandId: brand.id, imageId: image.id, nextProductId })}
                 >
-                  <SelectTrigger aria-label={`${image.original_filename} 상품 변경`} className="hidden w-40 bg-white sm:flex">
+                  <SelectTrigger aria-label={`${image.original_filename} 상품 변경`} className="w-28 min-w-0 bg-white sm:w-40">
                     <SelectValue>{activeProducts.find((item) => item.id === image.product_id)?.name ?? product.name}</SelectValue>
                   </SelectTrigger>
                   <SelectContent align="end">
                     {activeProducts.map((item) => <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
-                <Button variant="destructive" size="icon-sm" aria-label={`${image.original_filename} 삭제`} onClick={() => setDeleting(image)}><Trash2Icon /></Button>
+                <Button variant="destructive" size="icon-sm" aria-label={`${image.original_filename} 삭제`} onClick={() => { setDeleteError(null); setDeleting(image) }}><Trash2Icon /></Button>
               </div>
             )}
-          />
+          />}
+          {imagesQuery.hasNextPage && <div className="flex justify-center border-t py-5"><Button variant="outline" onClick={() => imagesQuery.fetchNextPage()} disabled={imagesQuery.isFetchingNextPage}>{imagesQuery.isFetchingNextPage ? "불러오는 중" : "다음 사진 불러오기"}</Button></div>}
         </section>
       </div>
 
-      <AlertDialog open={Boolean(deleting)} onOpenChange={(open) => !open && setDeleting(null)}>
+      <AlertDialog open={Boolean(deleting)} onOpenChange={(open) => { if (!open && !remove.isPending) setDeleting(null) }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>상품 사진 삭제</AlertDialogTitle>
             <AlertDialogDescription>사진 1장과 박스 {deleting?.box_count ?? 0}개가 함께 삭제돼요. 삭제한 사진은 되돌릴 수 없어요.</AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter><AlertDialogCancel>취소</AlertDialogCancel><AlertDialogAction variant="destructive" onClick={() => deleting && remove.mutate(deleting.id)}>삭제</AlertDialogAction></AlertDialogFooter>
+          {deleteError && <p role="alert" className="text-sm text-destructive">{deleteError}</p>}
+          <AlertDialogFooter><AlertDialogCancel disabled={remove.isPending}>취소</AlertDialogCancel><AlertDialogAction variant="destructive" disabled={remove.isPending} onClick={() => deleting && !remove.isPending && remove.mutate({ brandId: brand.id, imageId: deleting.id })}>{remove.isPending ? "삭제 중" : "삭제"}</AlertDialogAction></AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
     </div>
   )
+}
+
+function toActionError(error: unknown, fallback: string) {
+  return error instanceof ApiClientError
+    ? `${error.body.message} ${error.body.action ?? "잠시 후 다시 시도해 주세요."}`
+    : `${fallback} 서버 연결을 확인한 뒤 다시 시도해 주세요.`
 }
 
 function PageState({ title, description, compact = false }: { title: string; description?: string; compact?: boolean }) {

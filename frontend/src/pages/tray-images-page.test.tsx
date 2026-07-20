@@ -18,12 +18,14 @@ let currentBrand = brand
 let nextCursor: string | null = null
 let responseDelay = 0
 const requests: string[] = []
+let pendingUploadCompletion: (() => void) | null = null
 
 vi.mock("@/features/brands/brand-provider", () => ({ useCurrentBrand: () => ({ brand: currentBrand, isLoading: false, error: null }) }))
 vi.mock("@/features/uploads/upload-dialog", () => ({
   UploadDialog: (props: { kind: string; productId?: string; onComplete?: (results: unknown[]) => void; children: React.ReactNode }) => (
     <div data-testid="upload-contract" data-kind={props.kind} data-product-id={props.productId ?? ""}>
       {props.children}<button onClick={() => props.onComplete?.([{ status: "success", image: { id: "uploaded-1" } }])}>업로드 성공 시뮬레이션</button>
+      <button onClick={() => { pendingUploadCompletion = () => props.onComplete?.([{ status: "success", image: { id: "old-brand-upload" } }]) }}>지연 업로드 시작</button>
     </div>
   ),
 }))
@@ -43,7 +45,7 @@ const server = setupServer(
 )
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }))
-afterEach(() => { cleanup(); responseItems = [makeImage(1)]; currentBrand = brand; nextCursor = null; responseDelay = 0; requests.length = 0; server.resetHandlers(); vi.useRealTimers() })
+afterEach(() => { cleanup(); responseItems = [makeImage(1)]; currentBrand = brand; pendingUploadCompletion = null; nextCursor = null; responseDelay = 0; requests.length = 0; server.resetHandlers(); vi.useRealTimers() })
 afterAll(() => server.close())
 
 function renderPage() {
@@ -126,6 +128,31 @@ describe("TrayImagesPage", () => {
     await waitFor(() => expect(screen.queryByRole("link", { name: "첫 사진 라벨링하기" })).not.toBeInTheDocument())
   })
 
+  it("resets a stale product filter when the current brand changes", async () => {
+    const user = userEvent.setup()
+    const view = renderPage()
+    await screen.findByText(responseItems[0].original_filename)
+    await user.click(screen.getByRole("combobox", { name: "상품 필터" }))
+    await user.click(await screen.findByRole("option", { name: product.name }))
+    await waitFor(() => expect(new URL(requests.at(-1)!).searchParams.get("product_id")).toBe(product.id))
+    currentBrand = { id: "brand-2", name: "다른 브랜드" }
+    view.rerender(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><TooltipProvider delay={0}><MemoryRouter><TrayImagesPage /></MemoryRouter></TooltipProvider></QueryClientProvider>)
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "상품 필터" })).toHaveTextContent("모든 상품"))
+    const newBrandRequest = [...requests].reverse().find((request) => request.includes("/brands/brand-2/images"))!
+    expect(new URL(newBrandRequest).searchParams.has("product_id")).toBe(false)
+  })
+
+  it("ignores an old upload completion after switching brands", async () => {
+    const user = userEvent.setup()
+    const view = renderPage()
+    await screen.findByText(responseItems[0].original_filename)
+    await user.click(screen.getByRole("button", { name: "지연 업로드 시작" }))
+    currentBrand = { id: "brand-2", name: "다른 브랜드" }
+    view.rerender(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><TooltipProvider delay={0}><MemoryRouter><TrayImagesPage /></MemoryRouter></TooltipProvider></QueryClientProvider>)
+    await act(async () => { pendingUploadCompletion?.() })
+    expect(screen.queryByRole("link", { name: "첫 사진 라벨링하기" })).not.toBeInTheDocument()
+  })
+
   it("deletes a tray photo only after confirming image and box counts", async () => {
     const user = userEvent.setup()
     renderPage()
@@ -137,5 +164,27 @@ describe("TrayImagesPage", () => {
     expect(await screen.findByText("라벨링할 트레이 사진이 없어요")).toBeVisible()
     const deleteRequest = requests.find((url) => url.includes("/api/v1/images/"))!
     expect(new URL(deleteRequest).searchParams.get("brand_id")).toBe(brand.id)
+  })
+
+  it("keeps tray deletion errors in the modal and prevents duplicate requests", async () => {
+    let release!: () => void
+    let deleteCount = 0
+    server.use(http.delete("/api/v1/images/:imageId", async () => {
+      deleteCount += 1
+      await new Promise<void>((resolve) => { release = resolve })
+      return HttpResponse.json({ code: "DELETE_FAILED", message: "트레이 사진을 삭제하지 못했어요.", action: "서버 연결을 확인한 뒤 다시 시도해 주세요." }, { status: 500 })
+    }))
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByText(responseItems[0].original_filename)
+    await user.click(screen.getByRole("button", { name: `${responseItems[0].original_filename} 삭제` }))
+    const alert = screen.getByRole("alertdialog", { name: "트레이 사진 삭제" })
+    const confirm = within(alert).getByRole("button", { name: "삭제" })
+    await user.click(confirm)
+    expect(confirm).toBeDisabled()
+    await user.click(confirm)
+    expect(deleteCount).toBe(1)
+    release()
+    expect(await within(alert).findByRole("alert")).toHaveTextContent("트레이 사진을 삭제하지 못했어요. 서버 연결을 확인한 뒤 다시 시도해 주세요.")
   })
 })

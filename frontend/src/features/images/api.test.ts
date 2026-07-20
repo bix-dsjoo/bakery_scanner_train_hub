@@ -7,6 +7,7 @@ import {
   deleteImage,
   getImage,
   imageThumbnailUrl,
+  imageOriginalUrl,
   listImages,
 } from "@/features/images/api"
 
@@ -67,6 +68,9 @@ describe("image api", () => {
     expect(requests[2]).toContain("product & one")
     expect(imageThumbnailUrl("brand/one", "image/1")).toBe(
       "/api/v1/images/image%2F1/thumbnail?brand_id=brand%2Fone"
+    )
+    expect(imageOriginalUrl("brand/one", "image/1")).toBe(
+      "/api/v1/images/image%2F1/original?brand_id=brand%2Fone"
     )
   })
 })
