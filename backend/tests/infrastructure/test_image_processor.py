@@ -47,6 +47,51 @@ def test_inspect_rejects_unsupported_extension_even_for_valid_content() -> None:
         ImageProcessor().inspect(FIXTURES / "valid.jpg", "valid.gif")
 
 
+def test_inspect_accepts_jpeg_named_mpo_as_jpeg(
+    tmp_path: Path, mpo_bytes: bytes
+) -> None:
+    source = tmp_path / "iphone.jpg"
+    source.write_bytes(mpo_bytes)
+
+    result = ImageProcessor().inspect(source, source.name)
+
+    assert result.mime_type == "image/jpeg"
+    assert result.extension == "jpg"
+    assert (result.width, result.height) == (40, 20)
+
+
+def test_inspect_rejects_mpo_filename_extension(
+    tmp_path: Path, mpo_bytes: bytes
+) -> None:
+    source = tmp_path / "iphone.mpo"
+    source.write_bytes(mpo_bytes)
+
+    with pytest.raises(UnsupportedImageError):
+        ImageProcessor().inspect(source, source.name)
+
+
+def test_inspect_rejects_corrupt_mpo(tmp_path: Path, mpo_bytes: bytes) -> None:
+    source = tmp_path / "corrupt-mpo.jpg"
+    source.write_bytes(mpo_bytes[:64])
+
+    with pytest.raises(InvalidImageError):
+        ImageProcessor().inspect(source, source.name)
+
+
+def test_create_thumbnail_uses_oriented_first_mpo_frame(
+    tmp_path: Path, mpo_bytes: bytes
+) -> None:
+    source = tmp_path / "iphone.jpg"
+    output = tmp_path / "thumbnail"
+    source.write_bytes(mpo_bytes)
+
+    result = ImageProcessor().create_thumbnail(source, output)
+
+    assert (result.width, result.height) == (20, 40)
+    inspected = ImageProcessor().inspect(output, "thumbnail.webp")
+    assert (inspected.width, inspected.height) == (20, 40)
+
+
 def test_create_thumbnail_writes_webp_with_long_edge_at_most_512(
     tmp_path: Path,
 ) -> None:

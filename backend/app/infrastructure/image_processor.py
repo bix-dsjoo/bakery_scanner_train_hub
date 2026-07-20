@@ -13,6 +13,7 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 
 FORMAT_DETAILS = {
     "JPEG": ("image/jpeg", "jpg", {".jpg", ".jpeg"}),
+    "MPO": ("image/jpeg", "jpg", {".jpg", ".jpeg"}),
     "PNG": ("image/png", "png", {".png"}),
     "WEBP": ("image/webp", "webp", {".webp"}),
 }
@@ -49,6 +50,7 @@ class ImageProcessor:
                     image_format = image.format
                     image.verify()
                 with Image.open(path) as image:
+                    image.seek(0)
                     image.load()
                     width, height = image.size
         except (
@@ -60,7 +62,9 @@ class ImageProcessor:
             raise InvalidImageError("file is not a decodable image") from error
 
         if image_format not in FORMAT_DETAILS:
-            raise UnsupportedImageError("image format must be JPEG, PNG, or WebP")
+            raise UnsupportedImageError(
+                "image format must be JPEG, PNG, WebP, or JPEG-compatible MPO"
+            )
         mime_type, extension, accepted_suffixes = FORMAT_DETAILS[image_format]
         if Path(original_filename).suffix.lower() not in accepted_suffixes:
             raise UnsupportedImageError("filename extension does not match image content")
@@ -91,8 +95,9 @@ class ImageProcessor:
                     with Image.open(source) as image:
                         if image.format not in FORMAT_DETAILS:
                             raise UnsupportedImageError(
-                                "image format must be JPEG, PNG, or WebP"
+                                "image format must be JPEG, PNG, WebP, or JPEG-compatible MPO"
                             )
+                        image.seek(0)
                         image.load()
                         thumbnail = ImageOps.exif_transpose(image)
                         thumbnail.thumbnail(
