@@ -47,10 +47,11 @@ def test_inspect_rejects_unsupported_extension_even_for_valid_content() -> None:
         ImageProcessor().inspect(FIXTURES / "valid.jpg", "valid.gif")
 
 
+@pytest.mark.parametrize("filename", ["iphone.jpg", "iphone.jpeg"])
 def test_inspect_accepts_jpeg_named_mpo_as_jpeg(
-    tmp_path: Path, mpo_bytes: bytes
+    tmp_path: Path, mpo_bytes: bytes, filename: str
 ) -> None:
-    source = tmp_path / "iphone.jpg"
+    source = tmp_path / filename
     source.write_bytes(mpo_bytes)
 
     result = ImageProcessor().inspect(source, source.name)
@@ -73,6 +74,17 @@ def test_inspect_rejects_mpo_filename_extension(
 def test_inspect_rejects_corrupt_mpo(tmp_path: Path, mpo_bytes: bytes) -> None:
     source = tmp_path / "corrupt-mpo.jpg"
     source.write_bytes(mpo_bytes[:64])
+
+    with pytest.raises(InvalidImageError):
+        ImageProcessor().inspect(source, source.name)
+
+
+def test_inspect_rejects_mpo_with_truncated_auxiliary_frame(
+    tmp_path: Path, mpo_bytes: bytes
+) -> None:
+    source = tmp_path / "corrupt-auxiliary-mpo.jpg"
+    first_frame_end = mpo_bytes.find(b"\xff\xd9") + 2
+    source.write_bytes(mpo_bytes[:first_frame_end])
 
     with pytest.raises(InvalidImageError):
         ImageProcessor().inspect(source, source.name)
