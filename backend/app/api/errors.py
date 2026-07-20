@@ -13,6 +13,8 @@ from backend.app.domain.catalog import (
     CatalogNotFound,
     CatalogValidationError,
 )
+from backend.app.application.image_library import ImageLibraryError
+from backend.app.application.image_upload import ImageUploadError
 
 
 logger = logging.getLogger(__name__)
@@ -74,6 +76,32 @@ def _validation_field_errors(error: RequestValidationError) -> dict[str, str]:
 
 
 def register_error_handlers(app: FastAPI) -> None:
+    @app.exception_handler(ImageLibraryError)
+    async def image_library_handler(
+        _request: Request, error: ImageLibraryError
+    ) -> JSONResponse:
+        return _response(
+            error.status_code,
+            ApiError(
+                code=error.code,
+                message=error.message,
+                action=error.action,
+                field_errors=error.field_errors,
+            ),
+        )
+
+    @app.exception_handler(ImageUploadError)
+    async def image_upload_handler(
+        _request: Request, error: ImageUploadError
+    ) -> JSONResponse:
+        status_code = 409 if error.code == "IMAGE_DUPLICATE" else 422
+        if error.code == "DISK_SPACE_LOW":
+            status_code = 507
+        return _response(
+            status_code,
+            ApiError(code=error.code, message=error.message, action=error.action),
+        )
+
     @app.exception_handler(CatalogConflict)
     async def catalog_conflict_handler(
         _request: Request, error: CatalogConflict

@@ -40,7 +40,7 @@ def migrated_engine(tmp_path: Path, monkeypatch):
     monkeypatch.setenv("BAKERY_DATABASE_URL", migration_settings.database_url)
     repository_root = Path(__file__).parents[3]
 
-    command.upgrade(Config(repository_root / "alembic.ini"), "head")
+    command.upgrade(Config(repository_root / "alembic.ini"), "0001_catalog")
 
     database_engine = create_engine_for(migration_settings)
     yield database_engine

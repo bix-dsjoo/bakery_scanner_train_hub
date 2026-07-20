@@ -246,7 +246,7 @@ Expected: FAIL because pages are absent.
 
 - [ ] **Step 3: 작업함 구현**
 
-트레이 업로드 성공 후 대표 행동은 `첫 사진 라벨링하기`다. 삭제는 이미지 수와 향후 삭제될 박스 수를 표시하는 AlertDialog를 사용한다. 목록은 thumbnail endpoint만 요청하며 원본 endpoint를 사용하지 않는다. 200ms보다 짧은 조회는 skeleton을 표시하지 않는다.
+트레이 업로드 성공 후 대표 행동은 `첫 사진 라벨링하기`다. 다만 이 업로드 단계에는 라벨링 route가 없으므로 버튼은 비활성 상태와 안내 문구로 표시하고, 다음 라벨링 편집기 단계에서 실제 route를 구현할 때 활성화한다. 삭제는 이미지 수와 향후 삭제될 박스 수를 표시하는 AlertDialog를 사용한다. 목록은 thumbnail endpoint만 요청하며 원본 endpoint를 사용하지 않는다. 200ms보다 짧은 조회는 skeleton을 표시하지 않는다.
 
 - [ ] **Step 4: 프런트엔드와 전체 단계 검증**
 
