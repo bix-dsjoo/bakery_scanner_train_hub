@@ -52,7 +52,10 @@ export async function uploadFiles(options: UploadFilesOptions): Promise<UploadRe
     file,
     status: "waiting",
   }))
-  const concurrency = Math.max(1, Math.floor(options.concurrency ?? 2))
+  const requestedConcurrency = options.concurrency ?? 2
+  const concurrency = Number.isFinite(requestedConcurrency)
+    ? Math.min(2, Math.max(1, Math.floor(requestedConcurrency)))
+    : 2
   const request = options.request ?? defaultUploadRequest
   let nextIndex = 0
 

@@ -36,6 +36,41 @@ describe("uploadFiles", () => {
     expect(results.every((result) => result.status === "success")).toBe(true)
   })
 
+  it.each([
+    { concurrency: 0, expectedMaximum: 1 },
+    { concurrency: -3, expectedMaximum: 1 },
+    { concurrency: Number.NaN, expectedMaximum: 2 },
+    { concurrency: Number.POSITIVE_INFINITY, expectedMaximum: 2 },
+    { concurrency: 9, expectedMaximum: 2 },
+  ])(
+    "normalizes concurrency=$concurrency and still processes every file in stable order",
+    async ({ concurrency, expectedMaximum }) => {
+      const files = Array.from({ length: 12 }, (_, index) => file(`${index}.jpg`))
+      let active = 0
+      let maximumActive = 0
+
+      const results = await uploadFiles({
+        files,
+        brandId: "brand-1",
+        kind: "TRAY",
+        concurrency,
+        request: async ({ file: currentFile }) => {
+          active += 1
+          maximumActive = Math.max(maximumActive, active)
+          await new Promise<void>((resolve) => queueMicrotask(resolve))
+          active -= 1
+          return { id: currentFile.name }
+        },
+      })
+
+      expect(maximumActive).toBe(expectedMaximum)
+      expect(results.map(({ file: currentFile }) => currentFile.name)).toEqual(
+        files.map(({ name }) => name)
+      )
+      expect(results.every(({ status }) => status === "success")).toBe(true)
+    }
+  )
+
   it("preserves file order and isolates duplicate, corrupt, and oversized failures", async () => {
     const files = [
       file("success.jpg"),
