@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import io
 import inspect
 import sqlite3
@@ -197,6 +198,7 @@ def test_mpo_jpeg_upload_preserves_original_and_existing_status_rules(
 
     original = LocalFileStorage(settings).resolve("originals", record.storage_key)
     assert original.read_bytes() == mpo_bytes
+    assert record.sha256 == hashlib.sha256(mpo_bytes).hexdigest()
     assert record.mime_type == "image/jpeg"
     assert (record.width, record.height) == (40, 20)
     assert record.labeling_status == expected_status
