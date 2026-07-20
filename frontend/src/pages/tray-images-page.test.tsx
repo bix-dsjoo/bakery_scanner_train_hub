@@ -112,9 +112,14 @@ describe("TrayImagesPage", () => {
     const user = userEvent.setup()
     renderPage()
     await screen.findByText(responseItems[0].original_filename)
+    const uploadAction = screen.getByRole("button", { name: "트레이 사진 올리기" })
+    expect(uploadAction).toHaveClass("bg-primary")
     await user.click(screen.getByRole("button", { name: "업로드 성공 시뮬레이션" }))
     const action = await screen.findByRole("link", { name: "첫 사진 라벨링하기" })
     expect(action).toHaveAttribute("href", "/images/uploaded-1/label")
+    expect(action).toHaveClass("bg-primary")
+    expect(uploadAction).toHaveClass("border-border", "bg-background")
+    expect(uploadAction).not.toHaveClass("bg-primary")
   })
 
   it("clears an uploaded-photo action when the current brand changes", async () => {

@@ -96,7 +96,7 @@ export function TrayImagesPage() {
         <header className="flex flex-col gap-5 border-b pb-6 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0"><p className="mb-1 truncate text-xs font-medium text-muted-foreground">{brand.name}</p><h1 className="text-2xl leading-8 font-bold tracking-[-0.02em]">트레이 사진</h1><p className="mt-1 text-sm text-muted-foreground">라벨이 필요한 사진을 찾아 작업을 시작합니다.</p></div>
           <UploadDialog key={brand.id} brandId={brand.id} kind="TRAY" onComplete={(results) => handleUploadComplete(brand.id, results)}>
-            <Button size="lg"><PlusIcon /> 트레이 사진 올리기</Button>
+            <Button size="lg" variant={uploadedImageId ? "outline" : "default"}><PlusIcon /> 트레이 사진 올리기</Button>
           </UploadDialog>
         </header>
 
