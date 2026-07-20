@@ -121,7 +121,7 @@ export function ProductDetailPage() {
               <Button size="lg"><PlusIcon /> 상품 사진 추가</Button>
             </UploadDialog>
           ) : (
-            <p role="alert" className="max-w-sm text-sm text-destructive">비활성 상품에는 사진을 추가할 수 없어요. 상품을 활성화한 뒤 다시 시도해 주세요.</p>
+            <p role="alert" className="max-w-sm text-sm text-destructive">비활성 상품에는 사진을 추가할 수 없어요. 상품 목록에서 활성 상품을 선택해 주세요.</p>
           )}
         </header>
 

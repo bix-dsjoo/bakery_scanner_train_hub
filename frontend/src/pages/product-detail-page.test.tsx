@@ -75,7 +75,7 @@ describe("ProductDetailPage", () => {
     expect(screen.queryByTestId("upload-contract")).not.toBeInTheDocument()
     expect(screen.queryByRole("button", { name: "상품 사진 추가" })).not.toBeInTheDocument()
     expect(screen.getByRole("alert")).toHaveTextContent("비활성 상품에는 사진을 추가할 수 없어요")
-    expect(screen.getByRole("alert")).toHaveTextContent("상품을 활성화한 뒤 다시 시도해 주세요")
+    expect(screen.getByRole("alert")).toHaveTextContent("상품 목록에서 활성 상품을 선택해 주세요")
   })
 
   it("keeps reassignment available on small layouts and exposes only active same-brand products", async () => {
