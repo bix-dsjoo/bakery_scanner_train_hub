@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { PlusIcon, Trash2Icon } from "lucide-react"
-import { Link } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -47,7 +46,7 @@ export function TrayImagesPage() {
     status,
     filename: filename.trim() || undefined,
     productId: productId === "ALL" ? undefined : productId,
-    limit: 100,
+    limit: 50,
   }
   const productsQuery = useQuery({
     queryKey: productsQueryKey(brand?.id ?? "", { status: "ACTIVE" }),
@@ -63,6 +62,11 @@ export function TrayImagesPage() {
   })
   const images = imagesQuery.data?.pages.flatMap((page) => page.items) ?? []
   const filtered = Boolean(filename.trim() || productId !== "ALL")
+  const productFilterError = productsQuery.error instanceof ApiClientError
+    ? `${productsQuery.error.body.message} ${productsQuery.error.body.action ?? "잠시 후 다시 시도해 주세요."}`
+    : productsQuery.error
+      ? "상품을 불러오지 못했어요. 서버 연결을 확인한 뒤 다시 시도해 주세요."
+      : undefined
   const remove = useMutation({
     mutationFn: ({ brandId, imageId }: { brandId: string; imageId: string }) => deleteImage(brandId, imageId),
     onSuccess: async (_, variables) => {
@@ -102,8 +106,8 @@ export function TrayImagesPage() {
 
         {uploadedImageId && (
           <div className="flex items-center justify-between gap-4 border-b bg-accent px-4 py-3">
-            <p className="text-sm">사진을 올렸어요. 첫 사진부터 라벨링을 시작할 수 있어요.</p>
-            <Button render={<Link to={`/images/${encodeURIComponent(uploadedImageId)}/label`} />}>첫 사진 라벨링하기</Button>
+            <p className="text-sm">사진을 올렸어요. 라벨링 편집기는 다음 단계에서 사용할 수 있어요.</p>
+            <Button disabled>첫 사진 라벨링하기</Button>
           </div>
         )}
 
@@ -113,7 +117,7 @@ export function TrayImagesPage() {
             <TabsTrigger value="COMPLETED">완료</TabsTrigger>
           </TabsList>
         </Tabs>
-        <ImageFilters filename={filename} onFilenameChange={setFilename} productId={productId} onProductChange={(value) => setProductFilter({ brandId: brand.id, value })} products={(productsQuery.data ?? []).filter((product) => product.brand_id === brand.id && product.status === "ACTIVE")} />
+        <ImageFilters filename={filename} onFilenameChange={setFilename} productId={productId} onProductChange={(value) => setProductFilter({ brandId: brand.id, value })} products={(productsQuery.data ?? []).filter((product) => product.brand_id === brand.id && product.status === "ACTIVE")} productDisabled={productsQuery.isLoading || Boolean(productsQuery.error)} productError={productFilterError} />
 
         <section aria-labelledby="tray-images-heading">
           <div className="flex h-11 items-center justify-between border-b text-xs font-medium text-muted-foreground"><h2 id="tray-images-heading">사진 목록</h2><span className="tabular-nums">{images.length}장</span></div>
@@ -127,6 +131,7 @@ export function TrayImagesPage() {
               empty={filtered
                 ? <PageState title="조건에 맞는 사진이 없어요" description="검색어나 상품 조건을 바꿔 주세요." compact action={<Button variant="outline" onClick={() => { setFilename(""); setProductFilter({ brandId: brand.id, value: "ALL" }) }}>필터 초기화</Button>} />
                 : <PageState title={status === "UNLABELED" ? "라벨링할 트레이 사진이 없어요" : "완료한 트레이 사진이 없어요"} description="트레이 사진을 올리면 이곳에서 찾을 수 있어요." compact />}
+              renderMetadata={(image) => <span>박스 {image.box_count}개</span>}
               renderActions={(image) => <Button variant="destructive" size="icon-sm" aria-label={`${image.original_filename} 삭제`} onClick={() => { setDeleteError(null); setDeleting(image) }}><Trash2Icon /></Button>}
             />
           )}

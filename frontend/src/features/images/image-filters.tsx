@@ -16,16 +16,20 @@ export function ImageFilters({
   productId,
   onProductChange,
   products,
+  productDisabled = false,
+  productError,
 }: {
   filename: string
   onFilenameChange: (value: string) => void
   productId: string
   onProductChange: (value: string) => void
   products: Product[]
+  productDisabled?: boolean
+  productError?: string
 }) {
   const selected = products.find((product) => product.id === productId)
   return (
-    <section aria-label="사진 검색과 필터" className="flex flex-col gap-3 border-b py-4 sm:flex-row">
+    <section aria-label="사진 검색과 필터" className="flex flex-col gap-3 border-b py-4 sm:flex-row sm:flex-wrap">
       <label className="relative block min-w-0 flex-1 sm:max-w-sm">
         <span className="sr-only">파일명 검색</span>
         <SearchIcon className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -38,7 +42,7 @@ export function ImageFilters({
           className="bg-white pl-9"
         />
       </label>
-      <Select value={productId} onValueChange={(value) => value && onProductChange(value)}>
+      <Select disabled={productDisabled} value={productId} onValueChange={(value) => value && onProductChange(value)}>
         <SelectTrigger aria-label="상품 필터" className="w-full bg-white sm:w-48">
           <SelectValue>{selected?.name ?? "모든 상품"}</SelectValue>
         </SelectTrigger>
@@ -47,6 +51,7 @@ export function ImageFilters({
           {products.map((product) => <SelectItem key={product.id} value={product.id}>{product.name}</SelectItem>)}
         </SelectContent>
       </Select>
+      {productError && <p role="alert" className="text-sm text-destructive sm:basis-full">{productError}</p>}
     </section>
   )
 }

@@ -60,7 +60,10 @@ describe("TrayImagesPage", () => {
     expect(await screen.findByText(responseItems[0].original_filename)).toBeVisible()
     expect(screen.getByRole("tab", { name: "라벨 필요" })).toHaveAttribute("aria-selected", "true")
     expect(screen.getByRole("tab", { name: "완료" })).toBeVisible()
-    expect(screen.getByRole("img", { name: responseItems[0].original_filename })).toHaveClass("size-14")
+    const thumbnail = screen.getByText(responseItems[0].original_filename).closest("li")!.querySelector("img")!
+    expect(thumbnail).toHaveClass("size-14")
+    expect(thumbnail).toHaveAttribute("alt", "")
+    expect(screen.getByText("박스 0개")).toBeVisible()
     expect(screen.getByText(responseItems[0].original_filename)).toHaveClass("truncate")
     expect(screen.getByTestId("upload-contract")).toHaveAttribute("data-kind", "TRAY")
 
@@ -89,7 +92,9 @@ describe("TrayImagesPage", () => {
     nextCursor = "next+/="
     const user = userEvent.setup()
     renderPage()
-    expect(await screen.findAllByRole("img")).toHaveLength(100)
+    await screen.findByText("tray-100.jpg")
+    expect(document.querySelectorAll("img")).toHaveLength(100)
+    expect(new URL(requests[0]).searchParams.get("limit")).toBe("50")
     responseItems = [makeImage(101)]
     nextCursor = null
     await user.click(screen.getByRole("button", { name: "다음 사진 불러오기" }))
@@ -115,11 +120,27 @@ describe("TrayImagesPage", () => {
     const uploadAction = screen.getByRole("button", { name: "트레이 사진 올리기" })
     expect(uploadAction).toHaveClass("bg-primary")
     await user.click(screen.getByRole("button", { name: "업로드 성공 시뮬레이션" }))
-    const action = await screen.findByRole("link", { name: "첫 사진 라벨링하기" })
-    expect(action).toHaveAttribute("href", "/images/uploaded-1/label")
+    const action = await screen.findByRole("button", { name: "첫 사진 라벨링하기" })
+    expect(action).toBeDisabled()
     expect(action).toHaveClass("bg-primary")
     expect(uploadAction).toHaveClass("border-border", "bg-background")
     expect(uploadAction).not.toHaveClass("bg-primary")
+    expect(screen.getByText(/라벨링 편집기는 다음 단계에서 사용할 수 있어요/)).toBeVisible()
+  })
+
+  it("shows positive box counts in tray row metadata", async () => {
+    responseItems = [{ ...makeImage(2), box_count: 3 }]
+    renderPage()
+    expect(await screen.findByText("박스 3개")).toBeVisible()
+  })
+
+  it("explains a product-filter failure and disables the filter", async () => {
+    server.use(http.get("/api/v1/brands/:brandId/products", () => HttpResponse.json({ code: "HTTP_ERROR", message: "상품을 불러오지 못했어요.", action: "서버 연결을 확인한 뒤 다시 시도해 주세요." }, { status: 500 })))
+    renderPage()
+    const alert = await screen.findByRole("alert")
+    expect(alert).toHaveTextContent("상품을 불러오지 못했어요")
+    expect(alert).toHaveTextContent("서버 연결을 확인한 뒤 다시 시도해 주세요")
+    expect(screen.getByRole("combobox", { name: "상품 필터" })).toBeDisabled()
   })
 
   it("clears an uploaded-photo action when the current brand changes", async () => {
@@ -127,10 +148,10 @@ describe("TrayImagesPage", () => {
     const view = renderPage()
     await screen.findByText(responseItems[0].original_filename)
     await user.click(screen.getByRole("button", { name: "업로드 성공 시뮬레이션" }))
-    expect(await screen.findByRole("link", { name: "첫 사진 라벨링하기" })).toBeVisible()
+    expect(await screen.findByRole("button", { name: "첫 사진 라벨링하기" })).toBeDisabled()
     currentBrand = { id: "brand-2", name: "다른 브랜드" }
     view.rerender(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><TooltipProvider delay={0}><MemoryRouter><TrayImagesPage /></MemoryRouter></TooltipProvider></QueryClientProvider>)
-    await waitFor(() => expect(screen.queryByRole("link", { name: "첫 사진 라벨링하기" })).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByRole("button", { name: "첫 사진 라벨링하기" })).not.toBeInTheDocument())
   })
 
   it("resets a stale product filter when the current brand changes", async () => {
@@ -155,7 +176,7 @@ describe("TrayImagesPage", () => {
     currentBrand = { id: "brand-2", name: "다른 브랜드" }
     view.rerender(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><TooltipProvider delay={0}><MemoryRouter><TrayImagesPage /></MemoryRouter></TooltipProvider></QueryClientProvider>)
     await act(async () => { pendingUploadCompletion?.() })
-    expect(screen.queryByRole("link", { name: "첫 사진 라벨링하기" })).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "첫 사진 라벨링하기" })).not.toBeInTheDocument()
   })
 
   it("deletes a tray photo only after confirming image and box counts", async () => {

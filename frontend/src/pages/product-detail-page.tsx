@@ -48,7 +48,7 @@ export function ProductDetailPage() {
     setActionError(null)
     setDeleteError(null)
   }, [brand?.id])
-  const imageFilters = { kind: "PRODUCT" as const, productId, limit: 100 }
+  const imageFilters = { kind: "PRODUCT" as const, productId, limit: 50 }
   const productsQuery = useQuery({
     queryKey: productsQueryKey(brand?.id ?? ""),
     queryFn: () => listProducts(brand!.id),
@@ -110,15 +110,19 @@ export function ProductDetailPage() {
             <h1 className="truncate text-2xl leading-8 font-bold tracking-[-0.02em]">{product.name}</h1>
             <p className="mt-1 text-sm text-muted-foreground">분류기 학습에 사용할 상품 사진을 관리합니다.</p>
           </div>
-          <UploadDialog
-            key={brand.id}
-            brandId={brand.id}
-            kind="PRODUCT"
-            productId={product.id}
-            onComplete={() => currentBrandIdRef.current === brand.id && queryClient.invalidateQueries({ queryKey: ["images", brand.id] })}
-          >
-            <Button size="lg"><PlusIcon /> 상품 사진 추가</Button>
-          </UploadDialog>
+          {product.status === "ACTIVE" ? (
+            <UploadDialog
+              key={brand.id}
+              brandId={brand.id}
+              kind="PRODUCT"
+              productId={product.id}
+              onComplete={() => currentBrandIdRef.current === brand.id && queryClient.invalidateQueries({ queryKey: ["images", brand.id] })}
+            >
+              <Button size="lg"><PlusIcon /> 상품 사진 추가</Button>
+            </UploadDialog>
+          ) : (
+            <p role="alert" className="max-w-sm text-sm text-destructive">비활성 상품에는 사진을 추가할 수 없어요. 상품을 활성화한 뒤 다시 시도해 주세요.</p>
+          )}
         </header>
 
         {actionError && <p role="alert" className="border-b py-3 text-sm text-destructive">{actionError}</p>}

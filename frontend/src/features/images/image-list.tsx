@@ -22,12 +22,14 @@ export function ImageList({
   loading,
   empty,
   renderActions,
+  renderMetadata,
 }: {
   brandId: string
   images: ImageRecord[]
   loading: boolean
   empty: ReactNode
   renderActions?: (image: ImageRecord) => ReactNode
+  renderMetadata?: (image: ImageRecord) => ReactNode
 }) {
   const showSkeleton = useDelayedLoading(loading)
   if (showSkeleton) {
@@ -41,12 +43,15 @@ export function ImageList({
         <li key={image.id} className="flex min-h-16 min-w-0 items-center gap-3 py-2">
           <img
             src={imageThumbnailUrl(brandId, image.id)}
-            alt={image.original_filename}
+            alt=""
             className="size-14 shrink-0 rounded-md border object-cover"
           />
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium" title={image.original_filename}>{image.original_filename}</p>
-            <p className="mt-1 text-xs text-muted-foreground tabular-nums">{new Date(image.created_at).toLocaleString("ko-KR")}</p>
+            <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground tabular-nums">
+              <span>{new Date(image.created_at).toLocaleString("ko-KR")}</span>
+              {renderMetadata?.(image)}
+            </div>
           </div>
           {renderActions?.(image)}
         </li>

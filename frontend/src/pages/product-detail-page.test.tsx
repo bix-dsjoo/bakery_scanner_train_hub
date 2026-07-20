@@ -19,6 +19,7 @@ const makeImage = (index: number) => ({ id: `image-${index}`, brand_id: brand.id
 const image = makeImage(1)
 let imageItems = [image]
 let nextCursor: string | null = null
+let currentProductStatus: "ACTIVE" | "INACTIVE" = "ACTIVE"
 const requests: string[] = []
 
 vi.mock("@/features/brands/brand-provider", () => ({ useCurrentBrand: () => ({ brand, isLoading: false, error: null }) }))
@@ -27,7 +28,7 @@ vi.mock("@/features/uploads/upload-dialog", () => ({
 }))
 
 const server = setupServer(
-  http.get("/api/v1/brands/:brandId/products", () => HttpResponse.json([currentProduct, activeProduct, inactiveProduct, otherBrandProduct])),
+  http.get("/api/v1/brands/:brandId/products", () => HttpResponse.json([{ ...currentProduct, status: currentProductStatus }, activeProduct, inactiveProduct, otherBrandProduct])),
   http.get("/api/v1/brands/:brandId/images", ({ request }) => {
     requests.push(request.url)
     return HttpResponse.json({ items: imageItems, next_cursor: nextCursor })
@@ -46,7 +47,7 @@ const server = setupServer(
 )
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }))
-afterEach(() => { cleanup(); imageItems = [image]; nextCursor = null; requests.length = 0; server.resetHandlers() })
+afterEach(() => { cleanup(); imageItems = [image]; nextCursor = null; currentProductStatus = "ACTIVE"; requests.length = 0; server.resetHandlers() })
 afterAll(() => server.close())
 
 function renderPage() {
@@ -61,8 +62,20 @@ describe("ProductDetailPage", () => {
     const contract = screen.getByTestId("upload-contract")
     expect(contract).toHaveAttribute("data-kind", "PRODUCT")
     expect(contract).toHaveAttribute("data-product-id", currentProduct.id)
-    expect(screen.getByRole("img", { name: image.original_filename })).toHaveAttribute("src", expect.stringContaining("/thumbnail?brand_id=brand-1"))
+    const thumbnail = screen.getByText(image.original_filename).closest("li")!.querySelector("img")!
+    expect(thumbnail).toHaveAttribute("src", expect.stringContaining("/thumbnail?brand_id=brand-1"))
+    expect(thumbnail).toHaveAttribute("alt", "")
     expect(document.body.innerHTML).not.toContain("/original")
+  })
+
+  it("blocks uploads for an inactive product with a cause and next action", async () => {
+    currentProductStatus = "INACTIVE"
+    renderPage()
+    expect(await screen.findByRole("heading", { name: currentProduct.name })).toBeVisible()
+    expect(screen.queryByTestId("upload-contract")).not.toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "상품 사진 추가" })).not.toBeInTheDocument()
+    expect(screen.getByRole("alert")).toHaveTextContent("비활성 상품에는 사진을 추가할 수 없어요")
+    expect(screen.getByRole("alert")).toHaveTextContent("상품을 활성화한 뒤 다시 시도해 주세요")
   })
 
   it("keeps reassignment available on small layouts and exposes only active same-brand products", async () => {
@@ -82,7 +95,9 @@ describe("ProductDetailPage", () => {
     nextCursor = "next-product"
     const user = userEvent.setup()
     renderPage()
-    expect(await screen.findAllByRole("img")).toHaveLength(100)
+    await screen.findByText("product-100.jpg")
+    expect(document.querySelectorAll("img")).toHaveLength(100)
+    expect(new URL(requests[0]).searchParams.get("limit")).toBe("50")
     imageItems = [makeImage(101)]
     nextCursor = null
     await user.click(screen.getByRole("button", { name: "다음 사진 불러오기" }))
