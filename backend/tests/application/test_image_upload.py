@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import io
 import inspect
 import sqlite3
@@ -163,6 +164,44 @@ def test_tray_upload_creates_unlabeled_record_without_product(
     assert record.kind == ImageKind.TRAY
     assert record.product_id is None
     assert record.labeling_status == LabelingStatus.UNLABELED
+
+
+@pytest.mark.parametrize(
+    ("kind", "expected_status"),
+    [
+        (ImageKind.PRODUCT, LabelingStatus.COMPLETED),
+        (ImageKind.TRAY, LabelingStatus.UNLABELED),
+    ],
+)
+def test_mpo_jpeg_upload_preserves_original_and_existing_status_rules(
+    session: Session,
+    settings: Settings,
+    catalog: CatalogService,
+    mpo_bytes: bytes,
+    kind: ImageKind,
+    expected_status: LabelingStatus,
+) -> None:
+    brand = catalog.create_brand(f"MPO {kind.value} Bakery")
+    product_id = None
+    if kind == ImageKind.PRODUCT:
+        product = catalog.create_product(brand.id, "MPO-001", "MPO 빵")
+        product_id = product.id
+    session.commit()
+
+    record = make_service(session, settings).upload(
+        brand.id,
+        kind,
+        product_id,
+        "iphone.jpg",
+        io.BytesIO(mpo_bytes),
+    )
+
+    original = LocalFileStorage(settings).resolve("originals", record.storage_key)
+    assert original.read_bytes() == mpo_bytes
+    assert record.sha256 == hashlib.sha256(mpo_bytes).hexdigest()
+    assert record.mime_type == "image/jpeg"
+    assert (record.width, record.height) == (40, 20)
+    assert record.labeling_status == expected_status
 
 
 def test_upload_processing_order_is_deterministic(

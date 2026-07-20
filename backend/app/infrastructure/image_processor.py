@@ -13,6 +13,7 @@ from PIL import Image, ImageOps, UnidentifiedImageError
 
 FORMAT_DETAILS = {
     "JPEG": ("image/jpeg", "jpg", {".jpg", ".jpeg"}),
+    "MPO": ("image/jpeg", "jpg", {".jpg", ".jpeg"}),
     "PNG": ("image/png", "png", {".png"}),
     "WEBP": ("image/webp", "webp", {".webp"}),
 }
@@ -49,7 +50,7 @@ class ImageProcessor:
                     image_format = image.format
                     image.verify()
                 with Image.open(path) as image:
-                    image.load()
+                    self._validate_mpo_frames(image)
                     width, height = image.size
         except (
             Image.DecompressionBombWarning,
@@ -60,7 +61,9 @@ class ImageProcessor:
             raise InvalidImageError("file is not a decodable image") from error
 
         if image_format not in FORMAT_DETAILS:
-            raise UnsupportedImageError("image format must be JPEG, PNG, or WebP")
+            raise UnsupportedImageError(
+                "image format must be JPEG, PNG, WebP, or JPEG-compatible MPO"
+            )
         mime_type, extension, accepted_suffixes = FORMAT_DETAILS[image_format]
         if Path(original_filename).suffix.lower() not in accepted_suffixes:
             raise UnsupportedImageError("filename extension does not match image content")
@@ -91,9 +94,9 @@ class ImageProcessor:
                     with Image.open(source) as image:
                         if image.format not in FORMAT_DETAILS:
                             raise UnsupportedImageError(
-                                "image format must be JPEG, PNG, or WebP"
+                                "image format must be JPEG, PNG, WebP, or JPEG-compatible MPO"
                             )
-                        image.load()
+                        self._validate_mpo_frames(image)
                         thumbnail = ImageOps.exif_transpose(image)
                         thumbnail.thumbnail(
                             (max_edge, max_edge), Image.Resampling.LANCZOS
@@ -129,6 +132,15 @@ class ImageProcessor:
             image.verify()
         with Image.open(path) as image:
             image.load()
+
+    @staticmethod
+    def _validate_mpo_frames(image: Image.Image) -> None:
+        if image.format == "MPO":
+            for frame_index in range(image.n_frames):
+                image.seek(frame_index)
+                image.load()
+        image.seek(0)
+        image.load()
 
     @staticmethod
     def _publish_without_overwrite(source: Path, destination: Path) -> None:
